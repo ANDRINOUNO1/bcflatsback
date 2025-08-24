@@ -8,21 +8,21 @@ router.get('/stats', getRoomStats);
 router.get('/available', getAvailableRooms);
 
 // Protected routes (require authentication)
-router.get('/', authorize(), getAllRooms);
-router.get('/:id', authorize(), getRoomById);
-router.post('/', authorize(['Admin', 'SuperAdmin']), createRoom);
-router.put('/:id', authorize(['Admin', 'SuperAdmin']), updateRoom);
-router.delete('/:id', authorize(['Admin', 'SuperAdmin']), deleteRoom);
+router.get('/', ...authorize(), getAllRooms);
+router.get('/:id', ...authorize(), getRoomById);
+router.post('/', ...authorize(['Admin', 'SuperAdmin']), createRoom);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), updateRoom);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteRoom);
 
 // Room status management
-router.patch('/:id/status', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateRoomStatus);
-router.patch('/:id/maintenance', authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
+router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin', 'User']), updateRoomStatus);
+router.patch('/:id/maintenance', ...authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
 
 // Tenant management
-router.post('/:id/tenants', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), addTenantToRoom);
-router.delete('/:id/tenants/:tenantId', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), removeTenantFromRoom);
-router.get('/:id/tenants', authorize(), getRoomTenants);
-router.get('/:id/beds', authorize(), getRoomBedStatus);
+router.post('/:id/tenants', ...authorize(['Admin', 'SuperAdmin']), addTenantToRoom);
+router.delete('/:id/tenants/:tenantId', ...authorize(['Admin', 'SuperAdmin']), removeTenantFromRoom);
+router.get('/:id/tenants', ...authorize(), getRoomTenants);
+router.get('/:id/beds', ...authorize(), getRoomBedStatus);
 
 module.exports = router;
 

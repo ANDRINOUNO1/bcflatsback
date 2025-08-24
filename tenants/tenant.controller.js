@@ -7,21 +7,21 @@ const authorize = require('../_middleware/authorize');
 router.get('/stats', getTenantStats);
 
 // Protected routes (require authentication)
-router.get('/', authorize(), getAllTenants);
-router.get('/active', authorize(), getActiveTenants);
-router.get('/:id', authorize(), getTenantById);
-router.post('/', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), createTenant);
-router.put('/:id', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateTenant);
-router.delete('/:id', authorize(['Admin', 'SuperAdmin']), deleteTenant);
+router.get('/', ...authorize(), getAllTenants);
+router.get('/active', ...authorize(), getActiveTenants);
+router.get('/:id', ...authorize(), getTenantById);
+router.post('/', ...authorize(['Admin', 'SuperAdmin']), createTenant);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), updateTenant);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteTenant);
 
 // Tenant status management
-router.patch('/:id/checkin', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), checkInTenant);
-router.patch('/:id/checkout', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), checkOutTenant);
-router.patch('/:id/status', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateTenantStatus);
+router.patch('/:id/checkin', ...authorize(['Admin', 'SuperAdmin']), checkInTenant);
+router.patch('/:id/checkout', ...authorize(['Admin', 'SuperAdmin']), checkOutTenant);
+router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin']), updateTenantStatus);
 
 // Tenant search and filtering
-router.get('/search/account/:accountId', authorize(), getTenantsByAccount);
-router.get('/search/room/:roomId', authorize(), getTenantsByRoom);
+router.get('/search/account/:accountId', ...authorize(), getTenantsByAccount);
+router.get('/search/room/:roomId', ...authorize(), getTenantsByRoom);
 
 module.exports = router;
 

@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const config = require('./config.json');
 const db = require('./_helpers/db');
+const authorize = require('./_middleware/authorize');
 const app = express();
 const errorHandler = require('./_middleware/error-handler');
 
@@ -24,7 +25,7 @@ app.get('/api/health', (req, res) => {
 });
 
 
-app.get('/api/test-auth', authorize(), (req, res) => {
+app.get('/api/test-auth', ...authorize(), (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Authentication successful',
