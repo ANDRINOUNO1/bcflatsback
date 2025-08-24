@@ -8,7 +8,7 @@ const errorHandler = require('./_middleware/error-handler');
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:4200', // Angular dev server default port
+  origin: ['http://localhost:5173', 'http://localhost:3000'], // Allow multiple origins
   credentials: true
 }));
 app.use(express.json());
