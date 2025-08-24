@@ -7,11 +7,9 @@ const authorize = require('../_middleware/authorize');
 router.get('/stats', getTenantStats);
 
 // Protected routes (require authentication)
-router.use(authorize()); // All routes below require authentication
-
-router.get('/', getAllTenants);
-router.get('/active', getActiveTenants);
-router.get('/:id', getTenantById);
+router.get('/', authorize(), getAllTenants);
+router.get('/active', authorize(), getActiveTenants);
+router.get('/:id', authorize(), getTenantById);
 router.post('/', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), createTenant);
 router.put('/:id', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateTenant);
 router.delete('/:id', authorize(['Admin', 'SuperAdmin']), deleteTenant);
@@ -22,8 +20,8 @@ router.patch('/:id/checkout', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']
 router.patch('/:id/status', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateTenantStatus);
 
 // Tenant search and filtering
-router.get('/search/account/:accountId', getTenantsByAccount);
-router.get('/search/room/:roomId', getTenantsByRoom);
+router.get('/search/account/:accountId', authorize(), getTenantsByAccount);
+router.get('/search/room/:roomId', authorize(), getTenantsByRoom);
 
 module.exports = router;
 

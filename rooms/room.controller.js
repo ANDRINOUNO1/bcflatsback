@@ -6,12 +6,10 @@ const authorize = require('../_middleware/authorize');
 // Public routes
 router.get('/stats', getRoomStats);
 router.get('/available', getAvailableRooms);
-router.get('/:id', getRoomById);
 
 // Protected routes (require authentication)
-router.use(authorize()); // All routes below require authentication
-
-router.get('/', getAllRooms);
+router.get('/', authorize(), getAllRooms);
+router.get('/:id', authorize(), getRoomById);
 router.post('/', authorize(['Admin', 'SuperAdmin']), createRoom);
 router.put('/:id', authorize(['Admin', 'SuperAdmin']), updateRoom);
 router.delete('/:id', authorize(['Admin', 'SuperAdmin']), deleteRoom);
@@ -23,8 +21,8 @@ router.patch('/:id/maintenance', authorize(['Admin', 'SuperAdmin']), setMaintena
 // Tenant management
 router.post('/:id/tenants', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), addTenantToRoom);
 router.delete('/:id/tenants/:tenantId', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), removeTenantFromRoom);
-router.get('/:id/tenants', getRoomTenants);
-router.get('/:id/beds', getRoomBedStatus);
+router.get('/:id/tenants', authorize(), getRoomTenants);
+router.get('/:id/beds', authorize(), getRoomBedStatus);
 
 module.exports = router;
 

@@ -23,6 +23,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'BCFlats Backend is running' });
 });
 
+
+app.get('/api/test-auth', authorize(), (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Authentication successful',
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      status: req.user.status
+    }
+  });
+});
+
 // Global error handler
 app.use(errorHandler);
 
