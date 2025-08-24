@@ -52,17 +52,17 @@ const startServer = async () => {
     
     // Start server
     app.listen(port, () => {
-      console.log(`🚀 BCFlats Backend server listening on port ${port}`);
-      console.log(`📡 API available at http://localhost:${port}/api`);
+      console.log(` BCFlats Backend server listening on port ${port}`);
+      console.log(` API available at http://localhost:${port}/api`);
     });
   } catch (error) {
-    console.error('❌ Failed to initialize database:', error);
-    console.log('⚠️  Server will start without database connection');
+    console.error(' Failed to initialize database:', error);
+    console.log('  Server will start without database connection');
     
     // Start server anyway
     app.listen(port, () => {
-      console.log(`🚀 BCFlats Backend server listening on port ${port}`);
-      console.log(`📡 API available at http://localhost:${port}/api`);
+      console.log(` BCFlats Backend server listening on port ${port}`);
+      console.log(` API available at http://localhost:${port}/api`);
     });
   }
 };
