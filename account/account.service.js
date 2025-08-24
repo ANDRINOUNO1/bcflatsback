@@ -13,29 +13,34 @@ module.exports = {
     delete: _delete,
 };
 
-// 🔐 Authenticate User
+
+function omitHash(account) {
+    const { passwordHash, ...accountWithoutHash } = account;
+    return accountWithoutHash;
+}
+
+
 async function authenticate({ email, password }) {
     const account = await db.Account.scope('withHash').findOne({ where: { email } });
     if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
         throw 'Email or password is incorrect';
     }
 
-    // generate JWT token
     const token = jwt.sign({ sub: account.id, role: account.role }, config.secret, { expiresIn: '7d' });
     return { ...omitHash(account.get()), token };
 }
 
-// 📋 Get all users
+// Get all users
 async function getAll() {
     return await db.Account.findAll();
 }
 
-// 🔍 Get user by id
+//  Get user by id
 async function getById(id) {
     return await getAccount(id);
 }
 
-// ➕ Create new account
+//  Create new account
 async function create(params) {
     // check email
     if (await db.Account.findOne({ where: { email: params.email } })) {
@@ -51,7 +56,7 @@ async function create(params) {
     await account.save();
 }
 
-// ✏️ Update account
+//  Update account
 async function update(id, params) {
     const account = await getAccount(id);
 
@@ -72,7 +77,7 @@ async function update(id, params) {
     await account.save();
 }
 
-// ❌ Delete account
+//  Delete account
 async function _delete(id) {
     const account = await getAccount(id);
     await account.destroy();

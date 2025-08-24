@@ -1,0 +1,11 @@
+{
+  "secret": "your-super-secret-jwt-key-change-this-in-production",
+  "db": {
+    "host": "localhost",
+    "port": 3306,
+    "database": "bcflats",
+    "username": "root",
+    "password": "1234"
+  },
+  "port": 3000
+}

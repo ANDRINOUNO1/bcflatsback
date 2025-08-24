@@ -1,16 +1,55 @@
 const express = require('express');
+const cors = require('cors');
+const config = require('./config.json');
+const db = require('./_helpers/db');
 const app = express();
 const errorHandler = require('./_middleware/error-handler');
 
+// Middleware
+app.use(cors({
+  origin: 'http://localhost:4200', // Angular dev server default port
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // API routes
-app.use('/accounts', require('./accounts/account.controller'));
+app.use('/api/accounts', require('./account/account.controller'));
+app.use('/api/rooms', require('./rooms/room.controller'));
+app.use('/api/tenants', require('./tenants/tenant.controller'));
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'BCFlats Backend is running' });
+});
 
 // Global error handler
 app.use(errorHandler);
 
-// Start server
-const port = 3000;
-app.listen(port, () => console.log('Server listening on port ' + port));
+// Initialize database and start server
+const port = config.port || 3000;
+
+const startServer = async () => {
+  try {
+    // Initialize database
+    await db.initialize();
+    console.log('✅ Database initialized successfully');
+    
+    // Start server
+    app.listen(port, () => {
+      console.log(`🚀 BCFlats Backend server listening on port ${port}`);
+      console.log(`📡 API available at http://localhost:${port}/api`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to initialize database:', error);
+    console.log('⚠️  Server will start without database connection');
+    
+    // Start server anyway
+    app.listen(port, () => {
+      console.log(`🚀 BCFlats Backend server listening on port ${port}`);
+      console.log(`📡 API available at http://localhost:${port}/api`);
+    });
+  }
+};
+
+startServer();
