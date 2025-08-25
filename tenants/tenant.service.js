@@ -34,7 +34,7 @@ async function getAllTenants(floor) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role', 'status']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status']
                 },
                 roomInclude
             ],
@@ -55,7 +55,7 @@ async function getTenantById(id) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role', 'status']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status']
                 },
                 {
                     model: db.Room,
@@ -80,7 +80,7 @@ async function getActiveTenants() {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role']
                 },
                 {
                     model: db.Room,

@@ -35,7 +35,7 @@ async function getAllRooms(floor) {
                         {
                             model: db.Account,
                             as: 'account',
-                            attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                            attributes: ['id', 'firstName', 'lastName', 'email']
                         }
                     ]
                 }
@@ -346,7 +346,7 @@ async function getRoomTenants(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                    attributes: ['id', 'firstName', 'lastName', 'email']
                 }
             ],
             order: [['bedNumber', 'ASC']]
@@ -372,7 +372,7 @@ async function getRoomBedStatus(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                    attributes: ['id', 'firstName', 'lastName', 'email']
                 }
             ],
             order: [['bedNumber', 'ASC']]
