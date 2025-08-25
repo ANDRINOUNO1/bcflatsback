@@ -7,7 +7,7 @@ const authorize = require('../_middleware/authorize');
 router.get('/stats', getRoomStats);
 router.get('/available', getAvailableRooms);
 
-// Protected routes (require authentication)
+//auth routes
 router.get('/', ...authorize(), getAllRooms);
 router.get('/:id', ...authorize(), getRoomById);
 router.post('/', ...authorize(['Admin', 'SuperAdmin']), createRoom);
@@ -29,7 +29,8 @@ module.exports = router;
 // Controller functions
 async function getAllRooms(req, res, next) {
     try {
-        const rooms = await roomService.getAllRooms();
+        const { floor } = req.query;
+        const rooms = await roomService.getAllRooms(floor);
         res.json(rooms);
     } catch (error) {
         next(error);

@@ -17,9 +17,14 @@ module.exports = {
 };
 
 // Get all rooms with tenant information
-async function getAllRooms() {
+async function getAllRooms(floor) {
     try {
+        const where = {};
+        if (floor !== undefined && floor !== null && floor !== '') {
+            where.floor = floor;
+        }
         const rooms = await db.Room.findAll({
+            where,
             include: [
                 {
                     model: db.Tenant,

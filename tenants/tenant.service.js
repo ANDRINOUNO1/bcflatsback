@@ -16,8 +16,19 @@ module.exports = {
 };
 
 // Get all tenants with account and room information
-async function getAllTenants() {
+async function getAllTenants(floor) {
     try {
+        const roomInclude = {
+            model: db.Room,
+            as: 'room',
+            attributes: ['id', 'roomNumber', 'floor', 'building', 'status']
+        };
+
+        if (floor !== undefined && floor !== null && floor !== '') {
+            roomInclude.where = { floor };
+            roomInclude.required = true; // only tenants on that floor
+        }
+
         const tenants = await db.Tenant.findAll({
             include: [
                 {
@@ -25,11 +36,7 @@ async function getAllTenants() {
                     as: 'account',
                     attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role', 'status']
                 },
-                {
-                    model: db.Room,
-                    as: 'room',
-                    attributes: ['id', 'roomNumber', 'floor', 'building', 'status']
-                }
+                roomInclude
             ],
             order: [['checkInDate', 'DESC']]
         });

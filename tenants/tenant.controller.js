@@ -28,7 +28,8 @@ module.exports = router;
 // Controller functions
 async function getAllTenants(req, res, next) {
     try {
-        const tenants = await tenantService.getAllTenants();
+        const { floor } = req.query;
+        const tenants = await tenantService.getAllTenants(floor);
         res.json(tenants);
     } catch (error) {
         next(error);
