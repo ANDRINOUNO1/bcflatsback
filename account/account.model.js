@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
         email: { type: DataTypes.STRING, allowNull: false },
         passwordHash: { type: DataTypes.STRING, allowNull: false },
         status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Pending' },
-        role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'frontdeskUser' },
+        role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'User' },
         created: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
         updated: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW }
     };

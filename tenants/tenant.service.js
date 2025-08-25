@@ -1,4 +1,5 @@
 const db = require('../_helpers/db');
+const { Op } = require('sequelize');
 
 module.exports = {
     getAllTenants,
@@ -16,20 +17,27 @@ module.exports = {
 };
 
 // Get all tenants with account and room information
-async function getAllTenants() {
+async function getAllTenants(floor) {
     try {
+        const roomInclude = {
+            model: db.Room,
+            as: 'room',
+            attributes: ['id', 'roomNumber', 'floor', 'building', 'status']
+        };
+
+        if (floor !== undefined && floor !== null && floor !== '') {
+            roomInclude.where = { floor };
+            roomInclude.required = true; // only tenants on that floor
+        }
+
         const tenants = await db.Tenant.findAll({
             include: [
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role', 'status']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status']
                 },
-                {
-                    model: db.Room,
-                    as: 'room',
-                    attributes: ['id', 'roomNumber', 'floor', 'building', 'status']
-                }
+                roomInclude
             ],
             order: [['checkInDate', 'DESC']]
         });
@@ -48,7 +56,7 @@ async function getTenantById(id) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role', 'status']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status']
                 },
                 {
                     model: db.Room,
@@ -73,7 +81,7 @@ async function getActiveTenants() {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role']
                 },
                 {
                     model: db.Room,
@@ -139,15 +147,12 @@ async function createTenant(tenantData) {
             throw new Error('Room is fully occupied');
         }
 
-        // Create tenant
+        // Create tenant (do not change room occupancy until check-in)
         const tenant = await db.Tenant.create({
             ...tenantData,
             status: 'Pending',
             checkInDate: new Date()
         });
-
-        // Update room occupancy
-        await room.addTenant();
 
         // Return tenant with details
         return await getTenantById(tenant.id);
@@ -178,7 +183,7 @@ async function updateTenant(id, updateData) {
                     roomId: newRoomId, 
                     bedNumber: newBedNumber, 
                     status: 'Active',
-                    id: { [db.Sequelize.Op.ne]: id }
+                    id: { [Op.ne]: id }
                 }
             });
 
@@ -237,7 +242,7 @@ async function checkInTenant(id) {
                 roomId: tenant.roomId, 
                 bedNumber: tenant.bedNumber, 
                 status: 'Active',
-                id: { [db.Sequelize.Op.ne]: id }
+                id: { [Op.ne]: id }
             }
         });
 
@@ -246,6 +251,13 @@ async function checkInTenant(id) {
         }
 
         await tenant.checkIn();
+
+        // Update room occupancy upon successful check-in
+        const room = await db.Room.findByPk(tenant.roomId);
+        if (room) {
+            await room.addTenant();
+        }
+
         return await getTenantById(id);
     } catch (error) {
         throw new Error(`Failed to check in tenant: ${error.message}`);

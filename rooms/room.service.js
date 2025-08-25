@@ -17,9 +17,14 @@ module.exports = {
 };
 
 // Get all rooms with tenant information
-async function getAllRooms() {
+async function getAllRooms(floor) {
     try {
+        const where = {};
+        if (floor !== undefined && floor !== null && floor !== '') {
+            where.floor = floor;
+        }
         const rooms = await db.Room.findAll({
+            where,
             include: [
                 {
                     model: db.Tenant,
@@ -30,7 +35,7 @@ async function getAllRooms() {
                         {
                             model: db.Account,
                             as: 'account',
-                            attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                            attributes: ['id', 'firstName', 'lastName', 'email']
                         }
                     ]
                 }
@@ -341,7 +346,7 @@ async function getRoomTenants(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                    attributes: ['id', 'firstName', 'lastName', 'email']
                 }
             ],
             order: [['bedNumber', 'ASC']]
@@ -367,7 +372,7 @@ async function getRoomBedStatus(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                    attributes: ['id', 'firstName', 'lastName', 'email']
                 }
             ],
             order: [['bedNumber', 'ASC']]

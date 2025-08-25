@@ -1,92 +1,161 @@
+const config = require('../config.json');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const config = require('../config.json'); // store jwt secret here
-const db = require('../_helpers/db'); // assumes db.js loads all models
-const Role = require('../_helpers/role'); // your role definitions
+const crypto = require('crypto');
+const { Op } = require('sequelize');
+const db = require('../_helpers/db');
 
 module.exports = {
     authenticate,
+    refreshToken,
+    revokeToken,
     getAll,
     getById,
     create,
     update,
-    delete: _delete,
+    delete: _delete
 };
 
+// ================= AUTH =================
 
-function omitHash(account) {
-    const { passwordHash, ...accountWithoutHash } = account;
-    return accountWithoutHash;
-}
-
-
-async function authenticate({ email, password }) {
+async function authenticate({ email, password, ipAddress }) {
     const account = await db.Account.scope('withHash').findOne({ where: { email } });
-    if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
+
+    if (!account || !bcrypt.compareSync(password, account.passwordHash)) {
         throw 'Email or password is incorrect';
     }
 
-    const token = jwt.sign({ sub: account.id, role: account.role }, config.secret, { expiresIn: '7d' });
-    return { ...omitHash(account.get()), token };
+    if (account.status !== 'Active') {
+        throw 'Account is not active. Please contact support.';
+    }
+
+    // authentication successful
+    const jwtToken = generateJwtToken(account);
+    const refreshToken = await generateRefreshToken(account, ipAddress);
+
+    // return basic details and tokens
+    return {
+        ...basicDetails(account),
+        jwtToken,
+        refreshToken: refreshToken.token
+    };
 }
 
-// Get all users
-async function getAll() {
+async function refreshToken({ token, ipAddress }) {
+    const refreshToken = await getRefreshToken(token);
+    const { account } = refreshToken;
+
+    // replace old refresh token with a new one and save
+    const newRefreshToken = await generateRefreshToken(account, ipAddress);
+    refreshToken.revoked = Date.now();
+    refreshToken.revokedByIp = ipAddress;
+    refreshToken.replacedByToken = newRefreshToken.token;
+    await refreshToken.save();
+
+    // generate new jwt
+    const jwtToken = generateJwtToken(account);
+
+    // return basic details and tokens
+    return {
+        ...basicDetails(account),
+        jwtToken,
+        refreshToken: newRefreshToken.token
+    };
+}
+async function revokeToken({ token, ipAddress }) {
+    const refreshToken = await getRefreshToken(token);
+
+    // revoke token and save
+    refreshToken.revoked = Date.now();
+    refreshToken.revokedByIp = ipAddress;
+    await refreshToken.save();
+}
+
+
+
+
+async function getAll() { 
     return await db.Account.findAll();
 }
 
-//  Get user by id
 async function getById(id) {
     return await getAccount(id);
 }
 
-//  Create new account
 async function create(params) {
-    // check email
+    // validate
     if (await db.Account.findOne({ where: { email: params.email } })) {
-        throw `Email "${params.email}" is already taken`;
-    }
-
-    // hash password
-    if (params.password) {
-        params.passwordHash = await bcrypt.hash(params.password, 10);
+        throw 'Email "' + params.email + '" is already registered';
     }
 
     const account = new db.Account(params);
+
+    // hash password
+    if (params.password) {
+        account.passwordHash = bcrypt.hashSync(params.password, 10);
+    }
+
+    // save
     await account.save();
+    return basicDetails(account);
 }
 
-//  Update account
 async function update(id, params) {
     const account = await getAccount(id);
 
-    // check email (if changed)
+    // validate (email)
     if (params.email && account.email !== params.email) {
         if (await db.Account.findOne({ where: { email: params.email } })) {
-            throw `Email "${params.email}" is already taken`;
+            throw 'Email "' + params.email + '" is already registered';
         }
     }
 
-    // hash password if provided
+    // hash password if entered
     if (params.password) {
-        params.passwordHash = await bcrypt.hash(params.password, 10);
+        params.passwordHash = bcrypt.hashSync(params.password, 10);
     }
 
-    // copy params
     Object.assign(account, params);
+    account.updated = Date.now();
     await account.save();
+
+    return basicDetails(account);
 }
 
-//  Delete account
 async function _delete(id) {
     const account = await getAccount(id);
     await account.destroy();
 }
 
-// helper
+// ================= HELPER FUNCTIONS =================
+
+function generateJwtToken(account) {
+    // create a jwt token valid for 15 minutes
+    return jwt.sign({ id: account.id, role: account.role }, config.secret, { expiresIn: '1h' });
+}
+
+async function generateRefreshToken(account, ipAddress) {
+    return await db.RefreshToken.create({
+        accountId: account.id,
+        token: crypto.randomBytes(40).toString('hex'),
+        expires: new Date(Date.now() + 7*24*60*60*1000), // 7 days
+        createdByIp: ipAddress
+    });
+}
+
+async function getRefreshToken(token) {
+    // FIX: Use db.RefreshToken and db.Account directly
+    const refreshToken = await db.RefreshToken.findOne({ where: { token }, include: 'Account' });
+    if (!refreshToken || !refreshToken.isActive) throw 'Invalid token';
+    return refreshToken;
+}
 async function getAccount(id) {
     const account = await db.Account.findByPk(id);
     if (!account) throw 'Account not found';
     return account;
 }
 
+function basicDetails(account) {
+    const { id, title, firstName, lastName, email, role, status, created, updated } = account;
+    return { id, title, firstName, lastName, email, role, status, created, updated };
+}

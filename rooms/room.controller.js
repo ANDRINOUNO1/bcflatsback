@@ -6,32 +6,31 @@ const authorize = require('../_middleware/authorize');
 // Public routes
 router.get('/stats', getRoomStats);
 router.get('/available', getAvailableRooms);
-router.get('/:id', getRoomById);
 
-// Protected routes (require authentication)
-router.use(authorize()); // All routes below require authentication
-
-router.get('/', getAllRooms);
-router.post('/', authorize(['Admin', 'SuperAdmin']), createRoom);
-router.put('/:id', authorize(['Admin', 'SuperAdmin']), updateRoom);
-router.delete('/:id', authorize(['Admin', 'SuperAdmin']), deleteRoom);
+//auth routes
+router.get('/', ...authorize(), getAllRooms);
+router.get('/:id', ...authorize(), getRoomById);
+router.post('/', ...authorize(['Admin', 'SuperAdmin']), createRoom);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), updateRoom);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteRoom);
 
 // Room status management
-router.patch('/:id/status', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), updateRoomStatus);
-router.patch('/:id/maintenance', authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
+router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin', 'User']), updateRoomStatus);
+router.patch('/:id/maintenance', ...authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
 
 // Tenant management
-router.post('/:id/tenants', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), addTenantToRoom);
-router.delete('/:id/tenants/:tenantId', authorize(['Admin', 'SuperAdmin', 'frontdeskUser']), removeTenantFromRoom);
-router.get('/:id/tenants', getRoomTenants);
-router.get('/:id/beds', getRoomBedStatus);
+router.post('/:id/tenants', ...authorize(['Admin', 'SuperAdmin']), addTenantToRoom);
+router.delete('/:id/tenants/:tenantId', ...authorize(['Admin', 'SuperAdmin']), removeTenantFromRoom);
+router.get('/:id/tenants', ...authorize(), getRoomTenants);
+router.get('/:id/beds', ...authorize(), getRoomBedStatus);
 
 module.exports = router;
 
 // Controller functions
 async function getAllRooms(req, res, next) {
     try {
-        const rooms = await roomService.getAllRooms();
+        const { floor } = req.query;
+        const rooms = await roomService.getAllRooms(floor);
         res.json(rooms);
     } catch (error) {
         next(error);
