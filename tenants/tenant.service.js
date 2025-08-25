@@ -1,4 +1,5 @@
 const db = require('../_helpers/db');
+const { Op } = require('sequelize');
 
 module.exports = {
     getAllTenants,
@@ -146,15 +147,12 @@ async function createTenant(tenantData) {
             throw new Error('Room is fully occupied');
         }
 
-        // Create tenant
+        // Create tenant (do not change room occupancy until check-in)
         const tenant = await db.Tenant.create({
             ...tenantData,
             status: 'Pending',
             checkInDate: new Date()
         });
-
-        // Update room occupancy
-        await room.addTenant();
 
         // Return tenant with details
         return await getTenantById(tenant.id);
@@ -185,7 +183,7 @@ async function updateTenant(id, updateData) {
                     roomId: newRoomId, 
                     bedNumber: newBedNumber, 
                     status: 'Active',
-                    id: { [db.Sequelize.Op.ne]: id }
+                    id: { [Op.ne]: id }
                 }
             });
 
@@ -244,7 +242,7 @@ async function checkInTenant(id) {
                 roomId: tenant.roomId, 
                 bedNumber: tenant.bedNumber, 
                 status: 'Active',
-                id: { [db.Sequelize.Op.ne]: id }
+                id: { [Op.ne]: id }
             }
         });
 
@@ -253,6 +251,13 @@ async function checkInTenant(id) {
         }
 
         await tenant.checkIn();
+
+        // Update room occupancy upon successful check-in
+        const room = await db.Room.findByPk(tenant.roomId);
+        if (room) {
+            await room.addTenant();
+        }
+
         return await getTenantById(id);
     } catch (error) {
         throw new Error(`Failed to check in tenant: ${error.message}`);
