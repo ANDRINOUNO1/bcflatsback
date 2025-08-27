@@ -1,6 +1,6 @@
 const Role = {
     Admin: 'Admin',
-    User:'User',
+    Tenant: 'Tenant',
     SuperAdmin: 'SuperAdmin',
     Owner: 'Owner'
 };
