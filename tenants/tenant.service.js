@@ -387,7 +387,7 @@ async function getTenantsByRoom(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role']
                 }
             ],
             order: [['bedNumber', 'ASC']]

@@ -44,6 +44,29 @@ router.patch('/:id/status', authorize(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Get maintenance requests by tenant
+router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
+  try {
+    const { tenantId } = req.params;
+    
+    // Check if user is requesting their own requests or is admin
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin' && req.user.id !== parseInt(tenantId)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    const requests = await db.Maintenance.findAll({
+      where: { tenantId: parseInt(tenantId) },
+      order: [['createdAt', 'DESC']],
+      include: [
+        { model: db.Room, attributes: ['roomNumber', 'building'] },
+        { model: db.Tenant, attributes: ['firstName', 'lastName'] }
+      ]
+    });
+    
+    res.json(requests);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
 
 
