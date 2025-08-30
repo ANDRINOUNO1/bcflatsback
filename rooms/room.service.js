@@ -13,7 +13,8 @@ module.exports = {
     addTenantToRoom,
     removeTenantFromRoom,
     getRoomTenants,
-    getRoomBedStatus
+    getRoomBedStatus,
+    updateRoomPricing
 };
 
 // Get all rooms with tenant information
@@ -65,7 +66,7 @@ async function getRoomById(id) {
                         {
                             model: db.Account,
                             as: 'account',
-                            attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                            attributes: ['id', 'firstName', 'lastName', 'email']
                         }
                     ]
                 }
@@ -284,11 +285,11 @@ async function addTenantToRoom(roomId, accountId, bedNumber, tenantData) {
         // Return tenant with account and room information
         const tenantWithDetails = await db.Tenant.findByPk(tenant.id, {
             include: [
-                {
-                    model: db.Account,
-                    as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
-                },
+                                        {
+                            model: db.Account,
+                            as: 'account',
+                            attributes: ['id', 'firstName', 'lastName', 'email']
+                        },
                 {
                     model: db.Room,
                     as: 'room',
@@ -385,12 +386,11 @@ async function getRoomBedStatus(roomId) {
             bedStatus.push({
                 bedNumber: bedNum,
                 status: tenant ? 'Occupied' : 'Available',
-                tenant: tenant ? {
+                tenant: tenant && tenant.account ? {
                     id: tenant.id,
-                    firstName: tenant.account.firstName,
-                    lastName: tenant.account.lastName,
-                    email: tenant.account.email,
-                    avatar: tenant.account.avatar,
+                    firstName: tenant.account.firstName || 'Unknown',
+                    lastName: tenant.account.lastName || 'User',
+                    email: tenant.account.email || 'No email',
                     checkInDate: tenant.checkInDate,
                     monthlyRent: tenant.monthlyRent,
                     utilities: tenant.utilities
@@ -414,5 +414,38 @@ async function getRoomBedStatus(roomId) {
         };
     } catch (error) {
         throw new Error(`Failed to get room bed status: ${error.message}`);
+    }
+}
+
+// Update room pricing (rent and utilities)
+async function updateRoomPricing(id, pricingData) {
+    try {
+        const room = await db.Room.findByPk(id);
+        if (!room) {
+            throw new Error('Room not found');
+        }
+
+        // Validate pricing data
+        if (pricingData.monthlyRent !== undefined && pricingData.monthlyRent < 0) {
+            throw new Error('Monthly rent cannot be negative');
+        }
+
+        if (pricingData.utilities !== undefined && pricingData.utilities < 0) {
+            throw new Error('Utilities cost cannot be negative');
+        }
+
+        // Update only pricing fields
+        const updateData = {};
+        if (pricingData.monthlyRent !== undefined) {
+            updateData.monthlyRent = pricingData.monthlyRent;
+        }
+        if (pricingData.utilities !== undefined) {
+            updateData.utilities = pricingData.utilities;
+        }
+
+        await room.update(updateData);
+        return room;
+    } catch (error) {
+        throw new Error(`Failed to update room pricing: ${error.message}`);
     }
 }

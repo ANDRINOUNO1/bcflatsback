@@ -18,6 +18,9 @@ router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteRoom);
 router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin', 'User']), updateRoomStatus);
 router.patch('/:id/maintenance', ...authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
 
+// Room pricing management
+router.patch('/:id/pricing', ...authorize(['Admin', 'SuperAdmin']), updateRoomPricing);
+
 // Tenant management
 router.post('/:id/tenants', ...authorize(['Admin', 'SuperAdmin']), addTenantToRoom);
 router.delete('/:id/tenants/:tenantId', ...authorize(['Admin', 'SuperAdmin']), removeTenantFromRoom);
@@ -114,6 +117,19 @@ async function setMaintenanceMode(req, res, next) {
     try {
         const { maintenance, reason } = req.body;
         const room = await roomService.setMaintenanceMode(req.params.id, maintenance, reason);
+        if (!room) {
+            return res.status(404).json({ message: 'Room not found' });
+        }
+        res.json(room);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function updateRoomPricing(req, res, next) {
+    try {
+        const { monthlyRent, utilities } = req.body;
+        const room = await roomService.updateRoomPricing(req.params.id, { monthlyRent, utilities });
         if (!room) {
             return res.status(404).json({ message: 'Room not found' });
         }

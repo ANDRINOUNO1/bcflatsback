@@ -40,6 +40,15 @@ module.exports = (sequelize) => {
             type: DataTypes.DATE,
             allowNull: true
         },
+        leaseStart: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            defaultValue: DataTypes.NOW
+        },
+        leaseEnd: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
         status: {
             type: DataTypes.ENUM('Active', 'Inactive', 'Pending', 'Checked Out'),
             defaultValue: 'Pending'

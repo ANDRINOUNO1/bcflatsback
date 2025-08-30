@@ -31,12 +31,14 @@ module.exports = (sequelize) => {
         },
         monthlyRent: {
             type: DataTypes.DECIMAL(10, 2),
-            allowNull: false
+            allowNull: false,
+            comment: 'Monthly rent price for the entire room'
         },
         utilities: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false,
-            defaultValue: 0.00
+            defaultValue: 0.00,
+            comment: 'Monthly utilities price for the entire room'
         },
         totalBeds: {
             type: DataTypes.INTEGER,
@@ -159,28 +161,37 @@ module.exports = (sequelize) => {
         };
     };
 
-    // Seeder method
+    // Seeder method - Updated for 8 floors (2nd to 9th) with 9 rooms per floor
     Room.seedDefaults = async function() {
         const defaults = [];
         
-        // Create 24 rooms (6 floors × 4 rooms per floor)
-        for (let floor = 1; floor <= 6; floor++) {
-            for (let room = 1; room <= 4; room++) {
+        // Create 72 rooms (8 floors × 9 rooms per floor) - Floors 2 to 9
+        for (let floor = 2; floor <= 9; floor++) {
+            for (let room = 1; room <= 9; room++) {
                 const roomNumber = `${floor}${room.toString().padStart(2, '0')}`;
-                const monthlyRent = 800 + (floor * 50) + (room * 25); // Higher floors and rooms cost more
+                
+                // Base pricing structure (in Philippine Peso) - PER BED:
+                // - Higher floors cost more (better view, less noise)
+                // - All rooms are the same type, pricing varies by floor and room number
+                let baseRentPerBed = (25000 + (floor * 1500)) / 4; // Base rent per bed (divided by 4 beds)
+                let baseUtilitiesPerBed = (3500 + (floor * 200)) / 4; // Utilities per bed (divided by 4 beds)
+                
+                // Add some variation based on room number
+                baseRentPerBed += (room * 125); // Variation based on room number
+                baseUtilitiesPerBed += (room * 25); // Variation based on room number
                 
                 defaults.push({
                     roomNumber,
                     floor,
                     building: 'Main Building',
-                    roomType: floor >= 5 ? 'Premium' : 'Standard',
+                    roomType: 'Standard', // All rooms are standard type
                     status: 'Available',
-                    monthlyRent,
-                    utilities: 100.00,
+                    monthlyRent: Math.round(baseRentPerBed), // Now per bed
+                    utilities: Math.round(baseUtilitiesPerBed), // Now per bed
                     totalBeds: 4,
                     occupiedBeds: 0,
-                    description: `${roomNumber} - ${floor}${floor === 1 ? 'st' : floor === 2 ? 'nd' : floor === 3 ? 'rd' : 'th'} floor`,
-                    amenities: ['WiFi', 'Air Conditioning', 'Furnished', 'Private Bathroom']
+                    description: `Room ${roomNumber} - ${floor}${floor === 1 ? 'st' : floor === 2 ? 'nd' : floor === 3 ? 'rd' : 'th'} floor (₱${Math.round(baseRentPerBed).toLocaleString()} per bed)`,
+                    amenities: ['WiFi', 'Air Conditioning', 'Furnished', 'Private Bathroom', 'Study Desk', 'Wardrobe']
                 });
             }
         }

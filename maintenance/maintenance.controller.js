@@ -1,0 +1,130 @@
+const express = require('express');
+const router = express.Router();
+const authorize = require('../_middleware/authorize');
+const db = require('../_helpers/db');
+
+// Create request (tenant)
+router.post('/', authorize(), async (req, res, next) => {
+  try {
+    const { roomId, title, description, priority } = req.body;
+    
+    // For testing purposes, if no tenant exists, create a dummy tenant or use a default
+    let tenantId = req.user.id;
+    
+    // Check if tenant exists, if not, try to find or create one
+    const existingTenant = await db.Tenant.findOne({ where: { accountId: req.user.id } });
+    if (existingTenant) {
+      tenantId = existingTenant.id;
+    } else {
+      // For testing: create a dummy tenant if none exists
+      const dummyTenant = await db.Tenant.create({
+        accountId: req.user.id,
+        firstName: req.user.firstName || 'Test',
+        lastName: req.user.lastName || 'Tenant',
+        email: req.user.email,
+        phone: '123-456-7890',
+        roomId: roomId,
+        bedNumber: 1,
+        monthlyRent: 8000,
+        utilities: 1000,
+        deposit: 16000,
+        checkInDate: new Date(),
+        emergencyContact: {
+          name: 'Emergency Contact',
+          phone: '123-456-7890',
+          relationship: 'Parent'
+        },
+        specialRequirements: 'None'
+      });
+      tenantId = dummyTenant.id;
+    }
+    
+    const request = await db.Maintenance.create({
+      tenantId: tenantId,
+      roomId,
+      title,
+      description,
+      priority: priority || 'Low'
+    });
+    res.json(request);
+  } catch (err) { 
+    console.error('Error creating maintenance request:', err);
+    next(err); 
+  }
+});
+
+// List all (admin)
+router.get('/', authorize(), async (req, res, next) => {
+  try {
+    // Only admins should see all; simple role check
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin') {
+      // tenants: only own
+      const list = await db.Maintenance.findAll({ where: { tenantId: req.user.id }, order: [['createdAt','DESC']] });
+      return res.json(list);
+    }
+    const list = await db.Maintenance.findAll({ order: [['createdAt','DESC']] });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+
+// Update status (admin)
+router.patch('/:id/status', authorize(), async (req, res, next) => {
+  try {
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    const item = await db.Maintenance.findByPk(req.params.id);
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    item.status = req.body.status || item.status;
+    await item.save();
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+// Get maintenance requests by tenant
+router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
+  try {
+    const { tenantId } = req.params;
+    
+    // Check if user is requesting their own requests or is admin
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin' && req.user.id !== parseInt(tenantId)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    const requests = await db.Maintenance.findAll({
+      where: { tenantId: parseInt(tenantId) },
+      order: [['createdAt', 'DESC']],
+      include: [
+        { model: db.Room, attributes: ['roomNumber', 'building'] },
+        { model: db.Tenant, attributes: ['firstName', 'lastName'] }
+      ]
+    });
+    
+    res.json(requests);
+  } catch (err) { next(err); }
+});
+
+// Get maintenance statistics (admin only)
+router.get('/stats', authorize(), async (req, res, next) => {
+  try {
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    const [total, pending, inProgress, resolved] = await Promise.all([
+      db.Maintenance.count(),
+      db.Maintenance.count({ where: { status: 'Open' } }),
+      db.Maintenance.count({ where: { status: 'In Progress' } }),
+      db.Maintenance.count({ where: { status: 'Resolved' } })
+    ]);
+    
+    res.json({
+      total,
+      pending,
+      inProgress,
+      resolved
+    });
+  } catch (err) { next(err); }
+});
+
+module.exports = router;
+
+
