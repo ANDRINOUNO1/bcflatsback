@@ -36,6 +36,7 @@ db.initialize = async function() {
         db.RefreshToken = require('../account/refresh-token.model')(sequelize, DataTypes);
         db.Room = require('../rooms/room.model')(sequelize, DataTypes);
         db.Tenant = require('../tenants/tenant.model')(sequelize, DataTypes);
+        db.Maintenance = require('../maintenance/maintenance.model')(sequelize, DataTypes);
 
         // define relationships
         db.Account.hasMany(db.RefreshToken, { onDelete: 'CASCADE', foreignKey: 'accountId' });
@@ -47,6 +48,12 @@ db.initialize = async function() {
 
         db.Account.hasMany(db.Tenant, { foreignKey: 'accountId', as: 'tenants' });
         db.Tenant.belongsTo(db.Account, { foreignKey: 'accountId', as: 'account' });
+
+        // Maintenance relationships
+        db.Tenant.hasMany(db.Maintenance, { foreignKey: 'tenantId', as: 'maintenanceRequests' });
+        db.Maintenance.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
+        db.Room.hasMany(db.Maintenance, { foreignKey: 'roomId', as: 'maintenanceRequests' });
+        db.Maintenance.belongsTo(db.Room, { foreignKey: 'roomId', as: 'room' });
 
         await sequelize.sync({ force: false });
         console.log('Database synchronized successfully');

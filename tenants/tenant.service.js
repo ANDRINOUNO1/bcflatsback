@@ -35,7 +35,8 @@ async function getAllTenants(floor) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'status'],
+                    where: { role: { [Op.ne]: 'Admin' } }
                 },
                 roomInclude
             ],
@@ -81,7 +82,8 @@ async function getActiveTenants() {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'role']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role'],
+                    where: { role: { [Op.ne]: 'Admin' } }
                 },
                 {
                     model: db.Room,
@@ -111,16 +113,60 @@ async function getTenantStats() {
 async function createTenant(tenantData) {
     try {
         // Validate required fields
-        const { accountId, roomId, bedNumber, monthlyRent } = tenantData;
+        const { accountId, email, password, roomId, bedNumber, monthlyRent } = tenantData;
         
-        if (!accountId || !roomId || !bedNumber || !monthlyRent) {
-            throw new Error('Missing required fields: accountId, roomId, bedNumber, monthlyRent');
+        if ((!accountId && !email) || !roomId || !bedNumber || !monthlyRent) {
+            throw new Error('Missing required fields: accountId/email, roomId, bedNumber, monthlyRent');
         }
 
-        // Check if account exists
-        const account = await db.Account.findByPk(accountId);
-        if (!account) {
-            throw new Error('Account not found');
+        // Resolve or create account — email has priority to avoid binding to wrong account
+        let account = null;
+        if (email) {
+            account = await db.Account.findOne({ where: { email } });
+            if (!account) {
+                const bcrypt = require('bcryptjs');
+                const passwordHash = bcrypt.hashSync(password || 'changeme123', 10);
+                account = await db.Account.create({
+                    title: 'tenant',
+                    firstName: tenantData.firstName || 'Tenant',
+                    lastName: tenantData.lastName || 'User',
+                    email,
+                    passwordHash,
+                    status: 'Active',
+                    role: 'Tenant'
+                });
+            }
+        } else if (accountId) {
+            account = await db.Account.findByPk(accountId);
+        }
+        if (!account) throw new Error('Account not found');
+
+        // Ensure linked account is a Tenant account
+        if (account.role !== 'Tenant') {
+            // If caller provided email+password different from the admin, create a tenant account from those creds
+            if (email && email !== account.email) {
+                const existing = await db.Account.findOne({ where: { email } });
+                if (existing) {
+                    if (existing.role !== 'Tenant') {
+                        throw new Error('Provided email belongs to a non-tenant account');
+                    }
+                    account = existing;
+                } else {
+                    const bcrypt = require('bcryptjs');
+                    const passwordHash = bcrypt.hashSync(password || 'changeme123', 10);
+                    account = await db.Account.create({
+                        title: 'tenant',
+                        firstName: tenantData.firstName || 'Tenant',
+                        lastName: tenantData.lastName || 'User',
+                        email,
+                        passwordHash,
+                        status: 'Active',
+                        role: 'Tenant'
+                    });
+                }
+            } else {
+                throw new Error('Selected account is not a tenant. Please use a tenant account or provide email+password to create one.');
+            }
         }
 
         // Check if room exists
@@ -150,6 +196,7 @@ async function createTenant(tenantData) {
         // Create tenant (do not change room occupancy until check-in)
         const tenant = await db.Tenant.create({
             ...tenantData,
+            accountId: account.id,
             status: 'Pending',
             checkInDate: new Date()
         });
@@ -340,7 +387,7 @@ async function getTenantsByRoom(roomId) {
                 {
                     model: db.Account,
                     as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar', 'role']
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'role']
                 }
             ],
             order: [['bedNumber', 'ASC']]

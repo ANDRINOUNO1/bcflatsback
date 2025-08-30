@@ -65,7 +65,7 @@ async function getRoomById(id) {
                         {
                             model: db.Account,
                             as: 'account',
-                            attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
+                            attributes: ['id', 'firstName', 'lastName', 'email']
                         }
                     ]
                 }
@@ -284,11 +284,11 @@ async function addTenantToRoom(roomId, accountId, bedNumber, tenantData) {
         // Return tenant with account and room information
         const tenantWithDetails = await db.Tenant.findByPk(tenant.id, {
             include: [
-                {
-                    model: db.Account,
-                    as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email', 'avatar']
-                },
+                                        {
+                            model: db.Account,
+                            as: 'account',
+                            attributes: ['id', 'firstName', 'lastName', 'email']
+                        },
                 {
                     model: db.Room,
                     as: 'room',
@@ -385,12 +385,11 @@ async function getRoomBedStatus(roomId) {
             bedStatus.push({
                 bedNumber: bedNum,
                 status: tenant ? 'Occupied' : 'Available',
-                tenant: tenant ? {
+                tenant: tenant && tenant.account ? {
                     id: tenant.id,
-                    firstName: tenant.account.firstName,
-                    lastName: tenant.account.lastName,
-                    email: tenant.account.email,
-                    avatar: tenant.account.avatar,
+                    firstName: tenant.account.firstName || 'Unknown',
+                    lastName: tenant.account.lastName || 'User',
+                    email: tenant.account.email || 'No email',
                     checkInDate: tenant.checkInDate,
                     monthlyRent: tenant.monthlyRent,
                     utilities: tenant.utilities
