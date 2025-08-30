@@ -67,6 +67,29 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Get maintenance statistics (admin only)
+router.get('/stats', authorize(), async (req, res, next) => {
+  try {
+    if (req.user.role !== 'Admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    
+    const [total, pending, inProgress, resolved] = await Promise.all([
+      db.Maintenance.count(),
+      db.Maintenance.count({ where: { status: 'Open' } }),
+      db.Maintenance.count({ where: { status: 'In Progress' } }),
+      db.Maintenance.count({ where: { status: 'Resolved' } })
+    ]);
+    
+    res.json({
+      total,
+      pending,
+      inProgress,
+      resolved
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
 
 
