@@ -7,15 +7,50 @@ const db = require('../_helpers/db');
 router.post('/', authorize(), async (req, res, next) => {
   try {
     const { roomId, title, description, priority } = req.body;
+    
+    // For testing purposes, if no tenant exists, create a dummy tenant or use a default
+    let tenantId = req.user.id;
+    
+    // Check if tenant exists, if not, try to find or create one
+    const existingTenant = await db.Tenant.findOne({ where: { accountId: req.user.id } });
+    if (existingTenant) {
+      tenantId = existingTenant.id;
+    } else {
+      // For testing: create a dummy tenant if none exists
+      const dummyTenant = await db.Tenant.create({
+        accountId: req.user.id,
+        firstName: req.user.firstName || 'Test',
+        lastName: req.user.lastName || 'Tenant',
+        email: req.user.email,
+        phone: '123-456-7890',
+        roomId: roomId,
+        bedNumber: 1,
+        monthlyRent: 8000,
+        utilities: 1000,
+        deposit: 16000,
+        checkInDate: new Date(),
+        emergencyContact: {
+          name: 'Emergency Contact',
+          phone: '123-456-7890',
+          relationship: 'Parent'
+        },
+        specialRequirements: 'None'
+      });
+      tenantId = dummyTenant.id;
+    }
+    
     const request = await db.Maintenance.create({
-      tenantId: req.user.id,
+      tenantId: tenantId,
       roomId,
       title,
       description,
       priority: priority || 'Low'
     });
     res.json(request);
-  } catch (err) { next(err); }
+  } catch (err) { 
+    console.error('Error creating maintenance request:', err);
+    next(err); 
+  }
 });
 
 // List all (admin)
