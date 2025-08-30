@@ -170,40 +170,27 @@ module.exports = (sequelize) => {
             for (let room = 1; room <= 9; room++) {
                 const roomNumber = `${floor}${room.toString().padStart(2, '0')}`;
                 
-                // Base pricing structure (in Philippine Peso):
+                // Base pricing structure (in Philippine Peso) - PER BED:
                 // - Higher floors cost more (better view, less noise)
-                // - Room numbers 1-3: Standard pricing
-                // - Room numbers 4-6: Premium pricing (+10%)
-                // - Room numbers 7-9: Deluxe pricing (+20%)
-                let baseRent = 25000 + (floor * 1500); // Base rent increases with floor
-                let baseUtilities = 3500 + (floor * 200); // Utilities increase slightly with floor
-                
-                let roomType = 'Standard';
-                if (room >= 4 && room <= 6) {
-                    baseRent *= 1.1; // 10% premium
-                    baseUtilities *= 1.05; // 5% premium
-                    roomType = 'Premium';
-                } else if (room >= 7) {
-                    baseRent *= 1.2; // 20% premium
-                    baseUtilities *= 1.1; // 10% premium
-                    roomType = 'Deluxe';
-                }
+                // - All rooms are the same type, pricing varies by floor and room number
+                let baseRentPerBed = (25000 + (floor * 1500)) / 4; // Base rent per bed (divided by 4 beds)
+                let baseUtilitiesPerBed = (3500 + (floor * 200)) / 4; // Utilities per bed (divided by 4 beds)
                 
                 // Add some variation based on room number
-                baseRent += (room * 500);
-                baseUtilities += (room * 100);
+                baseRentPerBed += (room * 125); // Variation based on room number
+                baseUtilitiesPerBed += (room * 25); // Variation based on room number
                 
                 defaults.push({
                     roomNumber,
                     floor,
                     building: 'Main Building',
-                    roomType,
+                    roomType: 'Standard', // All rooms are standard type
                     status: 'Available',
-                    monthlyRent: Math.round(baseRent),
-                    utilities: Math.round(baseUtilities),
+                    monthlyRent: Math.round(baseRentPerBed), // Now per bed
+                    utilities: Math.round(baseUtilitiesPerBed), // Now per bed
                     totalBeds: 4,
                     occupiedBeds: 0,
-                    description: `Room ${roomNumber} - ${floor}${floor === 1 ? 'st' : floor === 2 ? 'nd' : floor === 3 ? 'rd' : 'th'} floor, ${roomType} room`,
+                    description: `Room ${roomNumber} - ${floor}${floor === 1 ? 'st' : floor === 2 ? 'nd' : floor === 3 ? 'rd' : 'th'} floor (₱${Math.round(baseRentPerBed).toLocaleString()} per bed)`,
                     amenities: ['WiFi', 'Air Conditioning', 'Furnished', 'Private Bathroom', 'Study Desk', 'Wardrobe']
                 });
             }
