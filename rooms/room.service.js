@@ -13,7 +13,8 @@ module.exports = {
     addTenantToRoom,
     removeTenantFromRoom,
     getRoomTenants,
-    getRoomBedStatus
+    getRoomBedStatus,
+    updateRoomPricing
 };
 
 // Get all rooms with tenant information
@@ -413,5 +414,38 @@ async function getRoomBedStatus(roomId) {
         };
     } catch (error) {
         throw new Error(`Failed to get room bed status: ${error.message}`);
+    }
+}
+
+// Update room pricing (rent and utilities)
+async function updateRoomPricing(id, pricingData) {
+    try {
+        const room = await db.Room.findByPk(id);
+        if (!room) {
+            throw new Error('Room not found');
+        }
+
+        // Validate pricing data
+        if (pricingData.monthlyRent !== undefined && pricingData.monthlyRent < 0) {
+            throw new Error('Monthly rent cannot be negative');
+        }
+
+        if (pricingData.utilities !== undefined && pricingData.utilities < 0) {
+            throw new Error('Utilities cost cannot be negative');
+        }
+
+        // Update only pricing fields
+        const updateData = {};
+        if (pricingData.monthlyRent !== undefined) {
+            updateData.monthlyRent = pricingData.monthlyRent;
+        }
+        if (pricingData.utilities !== undefined) {
+            updateData.utilities = pricingData.utilities;
+        }
+
+        await room.update(updateData);
+        return room;
+    } catch (error) {
+        throw new Error(`Failed to update room pricing: ${error.message}`);
     }
 }
