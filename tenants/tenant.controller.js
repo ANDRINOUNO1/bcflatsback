@@ -15,8 +15,8 @@ router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), updateTenant);
 router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteTenant);
 
 // Tenant status management
-router.patch('/:id/checkin', ...authorize(['Admin', 'SuperAdmin']), checkInTenant);
-router.patch('/:id/checkout', ...authorize(['Admin', 'SuperAdmin']), checkOutTenant);
+router.patch('/:id/checkin', ...authorize(['Admin', 'SuperAdmin', 'User']), checkInTenant);
+router.patch('/:id/checkout', ...authorize(['Admin', 'SuperAdmin', 'User']), checkOutTenant);
 router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin']), updateTenantStatus);
 
 // Tenant search and filtering

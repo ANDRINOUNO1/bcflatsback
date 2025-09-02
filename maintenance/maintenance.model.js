@@ -8,7 +8,7 @@ module.exports = (sequelize) => {
     title: { type: DataTypes.STRING, allowNull: false },
     description: { type: DataTypes.TEXT, allowNull: true },
     priority: { type: DataTypes.ENUM('Low', 'Medium', 'High'), defaultValue: 'Low' },
-    status: { type: DataTypes.ENUM('Open', 'In Progress', 'Resolved'), defaultValue: 'Open' }
+    status: { type: DataTypes.ENUM('Pending', 'Ongoing', 'Fixed'), defaultValue: 'Pending' }
   }, {
     tableName: 'maintenance_requests',
     timestamps: true
