@@ -72,7 +72,7 @@ module.exports = (sequelize) => {
             defaultValue: []
         }
     }, {
-        tableName: 'rooms',
+        tableName: 'bcflats_rooms',
         timestamps: true,
         hooks: {
             beforeValidate: (room) => {

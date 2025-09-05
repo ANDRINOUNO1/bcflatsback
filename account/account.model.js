@@ -16,7 +16,7 @@ module.exports = (sequelize, DataTypes) => {
 
     const options = {
         timestamps: false,
-        tableName: 'Accounts',
+        tableName: 'bcflats_accounts',
         defaultScope: {
             attributes: { exclude: ['passwordHash'] }
         },

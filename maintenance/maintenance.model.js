@@ -10,7 +10,7 @@ module.exports = (sequelize) => {
     priority: { type: DataTypes.ENUM('Low', 'Medium', 'High'), defaultValue: 'Low' },
     status: { type: DataTypes.ENUM('Pending', 'Ongoing', 'Fixed'), defaultValue: 'Pending' }
   }, {
-    tableName: 'maintenance_requests',
+    tableName: 'bcflats_maintenance_requests',
     timestamps: true
   });
 

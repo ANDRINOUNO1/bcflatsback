@@ -85,7 +85,7 @@ module.exports = (sequelize) => {
             allowNull: true
         }
     }, {
-        tableName: 'tenants',
+        tableName: 'bcflats_tenants',
         timestamps: true,
         indexes: [
             {
