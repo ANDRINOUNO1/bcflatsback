@@ -24,7 +24,7 @@ module.exports = (sequelize) => {
             }
         }
     }, {
-        tableName: 'refresh_tokens',
+        tableName: 'bcflats_refresh_tokens',
         timestamps: true
     });
 

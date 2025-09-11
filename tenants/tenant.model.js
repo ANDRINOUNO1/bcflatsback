@@ -83,6 +83,22 @@ module.exports = (sequelize) => {
         notes: {
             type: DataTypes.TEXT,
             allowNull: true
+        },
+        outstandingBalance: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: false,
+            defaultValue: 0.00,
+            comment: 'Current outstanding balance owed by tenant'
+        },
+        lastPaymentDate: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            comment: 'Date of last payment received'
+        },
+        nextDueDate: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            comment: 'Next payment due date'
         }
     }, {
         tableName: 'bcflats_tenants',
@@ -119,6 +135,49 @@ module.exports = (sequelize) => {
 
     Tenant.prototype.getTotalCost = function() {
         return parseFloat(this.monthlyRent) + parseFloat(this.utilities);
+    };
+
+    Tenant.prototype.getOutstandingBalance = function() {
+        return parseFloat(this.outstandingBalance || 0);
+    };
+
+    Tenant.prototype.updateOutstandingBalance = async function(amount) {
+        this.outstandingBalance = parseFloat(this.outstandingBalance || 0) + parseFloat(amount);
+        await this.save();
+        return this;
+    };
+
+    Tenant.prototype.makePayment = async function(paymentAmount) {
+        const currentBalance = this.getOutstandingBalance();
+        const newBalance = Math.max(0, currentBalance - parseFloat(paymentAmount));
+        
+        this.outstandingBalance = newBalance;
+        this.lastPaymentDate = new Date();
+        await this.save();
+        
+        return {
+            balanceBefore: currentBalance,
+            balanceAfter: newBalance,
+            paymentAmount: parseFloat(paymentAmount)
+        };
+    };
+
+    Tenant.prototype.calculateNextDueDate = function() {
+        if (!this.leaseStart) return null;
+        
+        const leaseStart = new Date(this.leaseStart);
+        const now = new Date();
+        
+        // Calculate months since lease start
+        const monthsDiff = (now.getFullYear() - leaseStart.getFullYear()) * 12 + 
+                          (now.getMonth() - leaseStart.getMonth());
+        
+        // Next due date is the 1st of next month
+        const nextDueDate = new Date(leaseStart);
+        nextDueDate.setMonth(leaseStart.getMonth() + monthsDiff + 1);
+        nextDueDate.setDate(1);
+        
+        return nextDueDate;
     };
 
     // Class methods

@@ -19,6 +19,7 @@ app.use('/api/accounts', require('./account/account.controller'));
 app.use('/api/rooms', require('./rooms/room.controller'));
 app.use('/api/tenants', require('./tenants/tenant.controller'));
 app.use('/api/maintenance', require('./maintenance/maintenance.controller'));
+app.use('/api/payments', require('./payments/payment.controller'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
