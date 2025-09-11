@@ -4,13 +4,15 @@ const paymentService = require('./payment.service');
 const authorize = require('../_middleware/authorize');
 
 // Protected routes (require authentication)
+// Backwards-compatible tenant history route
 router.get('/tenant/:tenantId', ...authorize(), getPaymentsByTenant);
 router.get('/stats', ...authorize(), getPaymentStats);
 router.get('/recent', ...authorize(), getRecentPayments);
 router.get('/billing-info', ...authorize(), getTenantsWithBillingInfo);
 router.post('/', ...authorize(['Admin', 'SuperAdmin']), recordPayment);
 router.post('/process/:tenantId', ...authorize(['Admin', 'SuperAdmin']), processPayment);
-router.get('/:id', ...authorize(), getPaymentById);
+router.get('/id/:id', ...authorize(), getPaymentById);
+router.get('/:tenantId', ...authorize(), getPaymentsByTenant);
 
 module.exports = router;
 
