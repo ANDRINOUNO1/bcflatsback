@@ -7,7 +7,8 @@ module.exports = {
     getPaymentStats,
     getRecentPayments,
     getTenantsWithBillingInfo,
-    processPayment
+    processPayment,
+    accrueMonthlyChargesIfNeeded
 };
 
 // Record a new payment
@@ -173,6 +174,8 @@ async function getRecentPayments(limit = 10) {
 // Get tenants with billing information for accounting page
 async function getTenantsWithBillingInfo() {
     try {
+        // Ensure accruals are up to date for all active tenants
+        await accrueMonthlyChargesIfNeeded();
         const tenants = await db.Tenant.findAll({
             where: { status: 'Active' },
             include: [
@@ -225,6 +228,9 @@ async function processPayment(tenantId, paymentData) {
             throw new Error('Cannot process payment for inactive tenant');
         }
 
+        // Ensure latest accrual before applying payment
+        await accrueMonthlyChargesIfNeeded(tenantId);
+
         // Record the payment
         const payment = await recordPayment({
             ...paymentData,
@@ -234,5 +240,59 @@ async function processPayment(tenantId, paymentData) {
         return payment;
     } catch (error) {
         throw new Error(`Failed to process payment: ${error.message}`);
+    }
+}
+
+// Accrue monthly rent+utilities per active tenant if the current month hasn't been accrued yet.
+// Optionally limit to a specific tenantId.
+async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
+    const now = new Date();
+    const currentCycleMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const whereTenant = targetTenantId ? { id: targetTenantId } : { status: 'Active' };
+    const tenants = await db.Tenant.findAll({ where: whereTenant });
+
+    for (const tenant of tenants) {
+        // Skip if already accrued for this month
+        const existing = await db.BillingCycle.findOne({ where: { tenantId: tenant.id, cycleMonth: currentCycleMonth } });
+        if (existing) continue;
+
+        const previousBalance = tenant.getOutstandingBalance();
+        let depositApplied = 0;
+
+        // Apply deposit as credit once when outstanding is zero or at first cycle
+        if (tenant.deposit && !tenant.depositApplied) {
+            depositApplied = Math.min(previousBalance, parseFloat(tenant.deposit));
+            // If there is no previous balance, carry deposit as negative balance (credit)
+            if (previousBalance <= 0) {
+                depositApplied = parseFloat(tenant.deposit);
+            }
+            // Update tenant to mark deposit applied and reduce balance
+            tenant.outstandingBalance = Math.max(0, previousBalance - depositApplied);
+            tenant.depositPaid = true;
+            await tenant.save();
+        }
+
+        const monthlyCharges = parseFloat(tenant.monthlyRent) + parseFloat(tenant.utilities);
+
+        // Update balance with monthly charges
+        const balanceBeforeCharges = tenant.getOutstandingBalance();
+        const finalBalance = balanceBeforeCharges + monthlyCharges;
+        tenant.outstandingBalance = finalBalance;
+        tenant.nextDueDate = tenant.calculateNextDueDate();
+        await tenant.save();
+
+        // Sum payments made in this cycle month (optional; 0 default, actual payments will be recorded as they occur)
+        const paymentsMade = 0;
+
+        await db.BillingCycle.create({
+            tenantId: tenant.id,
+            cycleMonth: currentCycleMonth,
+            previousBalance: previousBalance.toFixed(2),
+            depositApplied: depositApplied.toFixed(2),
+            monthlyCharges: monthlyCharges.toFixed(2),
+            paymentsMade: paymentsMade.toFixed(2),
+            finalBalance: finalBalance.toFixed(2)
+        });
     }
 }
