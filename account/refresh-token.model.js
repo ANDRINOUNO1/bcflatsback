@@ -19,12 +19,12 @@ module.exports = (sequelize) => {
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {
-                model: 'accounts',
+                model: 'bcflats_accounts',
                 key: 'id'
             }
         }
     }, {
-        tableName: 'refresh_tokens',
+        tableName: 'bcflats_refresh_tokens',
         timestamps: true
     });
 

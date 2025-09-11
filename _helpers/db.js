@@ -37,6 +37,8 @@ db.initialize = async function() {
         db.Room = require('../rooms/room.model')(sequelize, DataTypes);
         db.Tenant = require('../tenants/tenant.model')(sequelize, DataTypes);
         db.Maintenance = require('../maintenance/maintenance.model')(sequelize, DataTypes);
+        db.Payment = require('../payments/payment.model')(sequelize, DataTypes);
+        db.BillingCycle = require('../payments/billing-cycle.model')(sequelize, DataTypes);
 
         // define relationships
         db.Account.hasMany(db.RefreshToken, { onDelete: 'CASCADE', foreignKey: 'accountId' });
@@ -54,6 +56,16 @@ db.initialize = async function() {
         db.Maintenance.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
         db.Room.hasMany(db.Maintenance, { foreignKey: 'roomId', as: 'maintenanceRequests' });
         db.Maintenance.belongsTo(db.Room, { foreignKey: 'roomId', as: 'room' });
+
+        // Payment relationships
+        db.Tenant.hasMany(db.Payment, { foreignKey: 'tenantId', as: 'payments' });
+        db.Payment.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
+        db.Account.hasMany(db.Payment, { foreignKey: 'processedBy', as: 'processedPayments' });
+        db.Payment.belongsTo(db.Account, { foreignKey: 'processedBy', as: 'processedByAccount' });
+
+        // Billing cycles
+        db.Tenant.hasMany(db.BillingCycle, { foreignKey: 'tenantId', as: 'billingCycles' });
+        db.BillingCycle.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
 
         await sequelize.sync({ force: false });
         console.log('Database synchronized successfully');

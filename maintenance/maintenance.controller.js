@@ -109,22 +109,20 @@ router.get('/stats', authorize(), async (req, res, next) => {
       return res.status(403).json({ message: 'Forbidden' });
     }
     
-    const [total, pending, inProgress, resolved] = await Promise.all([
+    const [total, pending, ongoing, fixed] = await Promise.all([
       db.Maintenance.count(),
-      db.Maintenance.count({ where: { status: 'Open' } }),
-      db.Maintenance.count({ where: { status: 'In Progress' } }),
-      db.Maintenance.count({ where: { status: 'Resolved' } })
+      db.Maintenance.count({ where: { status: 'Pending' } }),
+      db.Maintenance.count({ where: { status: 'Ongoing' } }),
+      db.Maintenance.count({ where: { status: 'Fixed' } })
     ]);
     
     res.json({
       total,
       pending,
-      inProgress,
-      resolved
+      ongoing,
+      fixed
     });
   } catch (err) { next(err); }
 });
 
 module.exports = router;
-
-

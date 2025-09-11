@@ -9,14 +9,18 @@ module.exports = (sequelize, DataTypes) => {
         email: { type: DataTypes.STRING, allowNull: false },
         passwordHash: { type: DataTypes.STRING, allowNull: false },
         status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Pending' },
-        role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Tenant' },
+        role: { 
+            type: DataTypes.ENUM('Admin', 'SuperAdmin', 'Tenant', 'Accounting'), 
+            allowNull: false, 
+            defaultValue: 'Tenant' 
+        },
         created: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
         updated: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW }
     };
 
     const options = {
         timestamps: false,
-        tableName: 'Accounts',
+        tableName: 'bcflats_accounts',
         defaultScope: {
             attributes: { exclude: ['passwordHash'] }
         },

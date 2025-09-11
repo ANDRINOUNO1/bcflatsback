@@ -88,6 +88,11 @@ async function create(params) {
         throw 'Email "' + params.email + '" is already registered';
     }
 
+    // default title when role is Accounting and title is missing/empty
+    if (params && params.role === 'Accounting' && (!params.title || params.title.trim() === '')) {
+        params.title = 'accounting';
+    }
+
     const account = new db.Account(params);
 
     // hash password
