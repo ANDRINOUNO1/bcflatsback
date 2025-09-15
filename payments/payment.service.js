@@ -8,7 +8,8 @@ module.exports = {
     getRecentPayments,
     getTenantsWithBillingInfo,
     processPayment,
-    accrueMonthlyChargesIfNeeded
+    accrueMonthlyChargesIfNeeded,
+    getDashboardStats
 };
 
 // Record a new payment
@@ -294,5 +295,75 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
             paymentsMade: paymentsMade.toFixed(2),
             finalBalance: finalBalance.toFixed(2)
         });
+    }
+}
+
+// Get comprehensive dashboard statistics
+async function getDashboardStats() {
+    try {
+        // Ensure accruals are up to date
+        await accrueMonthlyChargesIfNeeded();
+        
+        // Get all active tenants with their billing info
+        const tenants = await db.Tenant.findAll({
+            where: { status: 'Active' },
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building']
+                }
+            ]
+        });
+
+        // Calculate statistics
+        const totalTenants = tenants.length;
+        const totalUnpaidBills = tenants.filter(t => t.getOutstandingBalance() > 0).length;
+        const totalOutstandingAmount = tenants.reduce((sum, t) => sum + t.getOutstandingBalance(), 0);
+        
+        // Get total payments made
+        const paymentStats = await db.Payment.getPaymentStats();
+        const totalAmountCollected = paymentStats.totalAmount || 0;
+        
+        // Get recent payments
+        const recentPayments = await db.Payment.getRecentPayments(5);
+        
+        // Get tenants with highest outstanding balances
+        const tenantsWithBalances = tenants
+            .filter(t => t.getOutstandingBalance() > 0)
+            .sort((a, b) => b.getOutstandingBalance() - a.getOutstandingBalance())
+            .slice(0, 5)
+            .map(tenant => ({
+                id: tenant.id,
+                name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                email: tenant.account.email,
+                roomNumber: tenant.room.roomNumber,
+                floor: tenant.room.floor,
+                outstandingBalance: tenant.getOutstandingBalance(),
+                nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate()
+            }));
+
+        return {
+            totalTenants,
+            totalUnpaidBills,
+            totalOutstandingAmount: parseFloat(totalOutstandingAmount.toFixed(2)),
+            totalAmountCollected: parseFloat(totalAmountCollected),
+            recentPayments: recentPayments.map(payment => ({
+                id: payment.id,
+                amount: parseFloat(payment.amount),
+                paymentDate: payment.paymentDate,
+                paymentMethod: payment.paymentMethod,
+                tenantName: `${payment.tenant.account.firstName} ${payment.tenant.account.lastName}`,
+                roomNumber: payment.tenant.room.roomNumber
+            })),
+            topOutstandingTenants: tenantsWithBalances
+        };
+    } catch (error) {
+        throw new Error(`Failed to get dashboard stats: ${error.message}`);
     }
 }
