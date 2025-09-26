@@ -41,6 +41,24 @@ module.exports = (sequelize, DataTypes) => {
                 status: 'Active',
                 role: 'Admin',
                 password: 'admin123'
+            },
+            {
+                title: 'superadmin',
+                firstName: 'Super',
+                lastName: 'Admin',
+                email: 'superadmin@example.com',
+                status: 'Active',
+                role: 'SuperAdmin',
+                password: 'superadmin123'
+            },
+            {
+                title: 'accounting',
+                firstName: 'Accounting',
+                lastName: 'User',
+                email: 'accounting@example.com',
+                status: 'Active',
+                role: 'Accounting',
+                password: 'accounting123'
             }
         ];
         for (const user of defaults) {
