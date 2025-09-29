@@ -147,13 +147,13 @@ module.exports = (sequelize) => {
         return this;
     };
 
-    Tenant.prototype.makePayment = async function(paymentAmount) {
+    Tenant.prototype.makePayment = async function(paymentAmount, options = {}) {
         const currentBalance = this.getOutstandingBalance();
         const newBalance = Math.max(0, currentBalance - parseFloat(paymentAmount));
         
         this.outstandingBalance = newBalance;
         this.lastPaymentDate = new Date();
-        await this.save();
+        await this.save({ transaction: options.transaction });
         
         return {
             balanceBefore: currentBalance,
@@ -168,11 +168,9 @@ module.exports = (sequelize) => {
         const leaseStart = new Date(this.leaseStart);
         const now = new Date();
         
-        // Calculate months since lease start
         const monthsDiff = (now.getFullYear() - leaseStart.getFullYear()) * 12 + 
                           (now.getMonth() - leaseStart.getMonth());
         
-        // Next due date is the 1st of next month
         const nextDueDate = new Date(leaseStart);
         nextDueDate.setMonth(leaseStart.getMonth() + monthsDiff + 1);
         nextDueDate.setDate(1);
@@ -235,9 +233,7 @@ module.exports = (sequelize) => {
         };
     };
 
-    // Seeder method
     Tenant.seedDefaults = async function() {
-        // This will be populated when tenants are added through the system
         console.log('Tenant seeder: No default tenants to create');
     };
 
