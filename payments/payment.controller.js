@@ -9,6 +9,7 @@ router.get('/tenant/:tenantId', ...authorize(), getPaymentsByTenant);
 router.get('/stats', ...authorize(), getPaymentStats);
 router.get('/recent', ...authorize(), getRecentPayments);
 router.get('/billing-info', ...authorize(), getTenantsWithBillingInfo);
+router.get('/dashboard-stats', ...authorize(), getDashboardStats);
 router.post('/', ...authorize(['Admin', 'SuperAdmin']), recordPayment);
 router.post('/process/:tenantId', ...authorize(['Admin', 'SuperAdmin']), processPayment);
 router.get('/id/:id', ...authorize(), getPaymentById);
@@ -94,6 +95,15 @@ async function getPaymentById(req, res, next) {
             return res.status(404).json({ message: 'Payment not found' });
         }
         res.json(payment);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getDashboardStats(req, res, next) {
+    try {
+        const stats = await paymentService.getDashboardStats();
+        res.json(stats);
     } catch (error) {
         next(error);
     }

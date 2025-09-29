@@ -22,6 +22,7 @@ router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin']), updateTenantS
 // Tenant search and filtering
 router.get('/search/account/:accountId', ...authorize(), getTenantsByAccount);
 router.get('/search/room/:roomId', ...authorize(), getTenantsByRoom);
+router.get('/:id/billing-info', ...authorize(), getTenantBillingInfo);
 
 module.exports = router;
 
@@ -146,6 +147,18 @@ async function getTenantsByRoom(req, res, next) {
     try {
         const tenants = await tenantService.getTenantsByRoom(req.params.roomId);
         res.json(tenants);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getTenantBillingInfo(req, res, next) {
+    try {
+        const billingInfo = await tenantService.getTenantBillingInfo(req.params.id);
+        if (!billingInfo) {
+            return res.status(404).json({ message: 'Tenant not found' });
+        }
+        res.json(billingInfo);
     } catch (error) {
         next(error);
     }

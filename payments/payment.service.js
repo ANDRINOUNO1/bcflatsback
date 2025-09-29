@@ -8,34 +8,20 @@ module.exports = {
     getRecentPayments,
     getTenantsWithBillingInfo,
     processPayment,
-    accrueMonthlyChargesIfNeeded
+    accrueMonthlyChargesIfNeeded,
+    getDashboardStats
 };
 
-// Record a new payment
 async function recordPayment(paymentData) {
+    const transaction = await db.sequelize.transaction();
     try {
         const { tenantId, amount, paymentMethod, reference, description, processedBy } = paymentData;
         
-        // Validate required fields
         if (!tenantId || !amount || !paymentMethod) {
             throw new Error('Missing required fields: tenantId, amount, paymentMethod');
         }
 
-        // Get tenant with current balance
-        const tenant = await db.Tenant.findByPk(tenantId, {
-            include: [
-                {
-                    model: db.Account,
-                    as: 'account',
-                    attributes: ['id', 'firstName', 'lastName', 'email']
-                },
-                {
-                    model: db.Room,
-                    as: 'room',
-                    attributes: ['id', 'roomNumber', 'floor', 'building']
-                }
-            ]
-        });
+        const tenant = await db.Tenant.findByPk(tenantId, { transaction });
 
         if (!tenant) {
             throw new Error('Tenant not found');
@@ -45,17 +31,14 @@ async function recordPayment(paymentData) {
             throw new Error('Cannot record payment for inactive tenant');
         }
 
-        const balanceBefore = tenant.getOutstandingBalance();
         const paymentAmount = parseFloat(amount);
 
         if (paymentAmount <= 0) {
             throw new Error('Payment amount must be greater than 0');
         }
 
-        // Process payment and update tenant balance
-        const balanceUpdate = await tenant.makePayment(paymentAmount);
+        const balanceUpdate = await tenant.makePayment(paymentAmount, { transaction });
         
-        // Create payment record
         const payment = await db.Payment.create({
             tenantId,
             amount: paymentAmount,
@@ -67,11 +50,13 @@ async function recordPayment(paymentData) {
             balanceAfter: balanceUpdate.balanceAfter,
             processedBy: processedBy || null,
             status: 'Completed'
-        });
+        }, { transaction });
 
-        // Return payment with tenant details
+        await transaction.commit();
+
         return await getPaymentById(payment.id);
     } catch (error) {
+        await transaction.rollback();
         throw new Error(`Failed to record payment: ${error.message}`);
     }
 }
@@ -111,7 +96,6 @@ async function getPaymentById(paymentId) {
         throw new Error(`Failed to get payment: ${error.message}`);
     }
 }
-
 // Get payments by tenant
 async function getPaymentsByTenant(tenantId, limit = 50) {
     try {
@@ -261,7 +245,7 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
         let depositApplied = 0;
 
         // Apply deposit as credit once when outstanding is zero or at first cycle
-        if (tenant.deposit && !tenant.depositApplied) {
+        if (tenant.deposit && !tenant.depositPaid) { 
             depositApplied = Math.min(previousBalance, parseFloat(tenant.deposit));
             // If there is no previous balance, carry deposit as negative balance (credit)
             if (previousBalance <= 0) {
@@ -294,5 +278,75 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
             paymentsMade: paymentsMade.toFixed(2),
             finalBalance: finalBalance.toFixed(2)
         });
+    }
+}
+
+// Get comprehensive dashboard statistics
+async function getDashboardStats() {
+    try {
+        // Ensure accruals are up to date
+        await accrueMonthlyChargesIfNeeded();
+        
+        // Get all active tenants with their billing info
+        const tenants = await db.Tenant.findAll({
+            where: { status: 'Active' },
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building']
+                }
+            ]
+        });
+
+        // Calculate statistics
+        const totalTenants = tenants.length;
+        const totalUnpaidBills = tenants.filter(t => t.getOutstandingBalance() > 0).length;
+        const totalOutstandingAmount = tenants.reduce((sum, t) => sum + t.getOutstandingBalance(), 0);
+        
+        // Get total payments made
+        const paymentStats = await db.Payment.getPaymentStats();
+        const totalAmountCollected = paymentStats.totalAmount || 0;
+        
+        // Get recent payments
+        const recentPayments = await db.Payment.getRecentPayments(5);
+        
+        // Get tenants with highest outstanding balances
+        const tenantsWithBalances = tenants
+            .filter(t => t.getOutstandingBalance() > 0)
+            .sort((a, b) => b.getOutstandingBalance() - a.getOutstandingBalance())
+            .slice(0, 5)
+            .map(tenant => ({
+                id: tenant.id,
+                name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                email: tenant.account.email,
+                roomNumber: tenant.room.roomNumber,
+                floor: tenant.room.floor,
+                outstandingBalance: tenant.getOutstandingBalance(),
+                nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate()
+            }));
+
+        return {
+            totalTenants,
+            totalUnpaidBills,
+            totalOutstandingAmount: parseFloat(totalOutstandingAmount.toFixed(2)),
+            totalAmountCollected: parseFloat(totalAmountCollected),
+            recentPayments: recentPayments.map(payment => ({
+                id: payment.id,
+                amount: parseFloat(payment.amount),
+                paymentDate: payment.paymentDate,
+                paymentMethod: payment.paymentMethod,
+                tenantName: `${payment.tenant.account.firstName} ${payment.tenant.account.lastName}`,
+                roomNumber: payment.tenant.room.roomNumber
+            })),
+            topOutstandingTenants: tenantsWithBalances
+        };
+    } catch (error) {
+        throw new Error(`Failed to get dashboard stats: ${error.message}`);
     }
 }

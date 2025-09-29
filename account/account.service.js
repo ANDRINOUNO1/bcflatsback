@@ -13,7 +13,13 @@ module.exports = {
     getById,
     create,
     update,
-    delete: _delete
+    delete: _delete,
+    // SuperAdmin management
+    getPending,
+    approveAccount,
+    rejectAccount,
+    setRole,
+    setStatus
 };
 
 // ================= AUTH =================
@@ -130,6 +136,52 @@ async function update(id, params) {
 async function _delete(id) {
     const account = await getAccount(id);
     await account.destroy();
+}
+
+// ================= SuperAdmin Management =================
+
+async function getPending() {
+    return await db.Account.findAll({ where: { status: 'Pending' } });
+}
+
+async function approveAccount(id) {
+    const account = await getAccount(id);
+    account.status = 'Active';
+    account.updated = Date.now();
+    await account.save();
+    return basicDetails(account);
+}
+
+async function rejectAccount(id, reason) {
+    const account = await getAccount(id);
+    account.status = 'Rejected';
+    account.updated = Date.now();
+    await account.save();
+    return { ...basicDetails(account), rejectionReason: reason || null };
+}
+
+async function setRole(id, role) {
+    const allowedRoles = ['Admin', 'SuperAdmin', 'Tenant', 'Accounting'];
+    if (!allowedRoles.includes(role)) {
+        throw 'Invalid role';
+    }
+    const account = await getAccount(id);
+    account.role = role;
+    account.updated = Date.now();
+    await account.save();
+    return basicDetails(account);
+}
+
+async function setStatus(id, status) {
+    const allowedStatuses = ['Active', 'Pending', 'Suspended', 'Deleted', 'Rejected'];
+    if (!allowedStatuses.includes(status)) {
+        throw 'Invalid status';
+    }
+    const account = await getAccount(id);
+    account.status = status;
+    account.updated = Date.now();
+    await account.save();
+    return basicDetails(account);
 }
 
 // ================= HELPER FUNCTIONS =================

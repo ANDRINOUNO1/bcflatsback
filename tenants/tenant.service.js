@@ -13,7 +13,8 @@ module.exports = {
     checkOutTenant,
     updateTenantStatus,
     getTenantsByAccount,
-    getTenantsByRoom
+    getTenantsByRoom,
+    getTenantBillingInfo
 };
 
 // Get all tenants with account and room information
@@ -396,5 +397,84 @@ async function getTenantsByRoom(roomId) {
         return tenants;
     } catch (error) {
         throw new Error(`Failed to get tenants by room: ${error.message}`);
+    }
+}
+
+// Get comprehensive billing information for a specific tenant
+async function getTenantBillingInfo(tenantId) {
+    try {
+        const tenant = await db.Tenant.findByPk(tenantId, {
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building', 'monthlyRent', 'utilities']
+                }
+            ]
+        });
+
+        if (!tenant) {
+            return null;
+        }
+
+        // Get payment history
+        const payments = await db.Payment.findAll({
+            where: { tenantId },
+            order: [['paymentDate', 'DESC']],
+            limit: 10
+        });
+
+        // Get billing cycles
+        const billingCycles = await db.BillingCycle.findAll({
+            where: { tenantId },
+            order: [['cycleMonth', 'DESC']],
+            limit: 6
+        });
+
+        return {
+            id: tenant.id,
+            name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+            email: tenant.account.email,
+            roomNumber: tenant.room.roomNumber,
+            floor: tenant.room.floor,
+            building: tenant.room.building,
+            monthlyRent: parseFloat(tenant.monthlyRent),
+            utilities: parseFloat(tenant.utilities),
+            totalMonthlyCost: tenant.getTotalCost(),
+            outstandingBalance: tenant.getOutstandingBalance(),
+            deposit: parseFloat(tenant.deposit || 0),
+            lastPaymentDate: tenant.lastPaymentDate,
+            nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate(),
+            checkInDate: tenant.checkInDate,
+            leaseStart: tenant.leaseStart,
+            leaseEnd: tenant.leaseEnd,
+            status: tenant.status,
+            paymentHistory: payments.map(payment => ({
+                id: payment.id,
+                amount: parseFloat(payment.amount),
+                paymentDate: payment.paymentDate,
+                paymentMethod: payment.paymentMethod,
+                reference: payment.reference,
+                description: payment.description,
+                balanceAfter: parseFloat(payment.balanceAfter),
+                status: payment.status
+            })),
+            billingCycles: billingCycles.map(cycle => ({
+                id: cycle.id,
+                cycleMonth: cycle.cycleMonth,
+                previousBalance: parseFloat(cycle.previousBalance),
+                depositApplied: parseFloat(cycle.depositApplied),
+                monthlyCharges: parseFloat(cycle.monthlyCharges),
+                paymentsMade: parseFloat(cycle.paymentsMade),
+                finalBalance: parseFloat(cycle.finalBalance)
+            }))
+        };
+    } catch (error) {
+        throw new Error(`Failed to get tenant billing info: ${error.message}`);
     }
 }
