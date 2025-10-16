@@ -6,7 +6,7 @@ module.exports = (sequelize, DataTypes) => {
         title: { type: DataTypes.STRING, allowNull: true },
         firstName: { type: DataTypes.STRING, allowNull: false },
         lastName: { type: DataTypes.STRING, allowNull: false },
-        email: { type: DataTypes.STRING, allowNull: false },
+        email: { type: DataTypes.STRING, allowNull: false, unique: true },
         passwordHash: { type: DataTypes.STRING, allowNull: false },
         status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Pending' },
         role: { 
@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
             attributes: { exclude: ['passwordHash'] }
         },
         scopes: {
-            withHash: { attributes: {}, }
+            withHash: { attributes: {} }
         }
     };
 
@@ -61,6 +61,7 @@ module.exports = (sequelize, DataTypes) => {
                 password: 'accounting123'
             }
         ];
+
         for (const user of defaults) {
             const hashedPassword = bcrypt.hashSync(user.password, 10);
             const { password, ...userWithoutPassword } = user;
