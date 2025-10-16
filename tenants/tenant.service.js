@@ -113,12 +113,16 @@ async function getTenantStats() {
 // Create new tenant
 async function createTenant(tenantData) {
     try {
+        console.log('Creating tenant with data:', tenantData);
+        
         // Validate required fields
         const { accountId, email, password, roomId, bedNumber, monthlyRent } = tenantData;
         
         if ((!accountId && !email) || !roomId || !bedNumber || !monthlyRent) {
             throw new Error('Missing required fields: accountId/email, roomId, bedNumber, monthlyRent');
         }
+
+        console.log('Validated fields - roomId:', roomId, 'bedNumber:', bedNumber, 'type:', typeof bedNumber);
 
         // Resolve or create account — email has priority to avoid binding to wrong account
         let account = null;
@@ -177,6 +181,7 @@ async function createTenant(tenantData) {
         }
 
         // Check if bed is available
+        console.log('Checking bed availability for roomId:', roomId, 'bedNumber:', bedNumber);
         const existingTenant = await db.Tenant.findOne({
             where: { 
                 roomId, 
@@ -184,6 +189,8 @@ async function createTenant(tenantData) {
                 status: 'Active' 
             }
         });
+
+        console.log('Existing tenant found:', existingTenant ? `Bed ${existingTenant.bedNumber} occupied by tenant ${existingTenant.id}` : 'No existing tenant');
 
         if (existingTenant) {
             throw new Error(`Bed ${bedNumber} is already occupied in this room`);

@@ -22,9 +22,9 @@ module.exports = router;
 
 //  Authenticate
 function authenticate(req, res, next) {
-    accountService.authenticate(req.body)
-        .then(account => res.json(account))
-        .catch(next);
+  accountService.authenticate(req.body)
+    .then(account => res.json(account))
+    .catch(next);
 }
 
 // ➕ Register
