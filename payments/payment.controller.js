@@ -12,6 +12,9 @@ router.get('/billing-info', ...authorize(), getTenantsWithBillingInfo);
 router.get('/dashboard-stats', ...authorize(), getDashboardStats);
 router.post('/', ...authorize(['Admin', 'SuperAdmin']), recordPayment);
 router.post('/process/:tenantId', ...authorize(['Admin', 'SuperAdmin']), processPayment);
+router.post('/pending/:tenantId', ...authorize(['Tenant']), createPendingPayment);
+router.post('/confirm/:paymentId', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), confirmPayment);
+router.get('/pending', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), getPendingPayments);
 router.get('/id/:id', ...authorize(), getPaymentById);
 router.get('/:tenantId', ...authorize(), getPaymentsByTenant);
 
@@ -104,6 +107,40 @@ async function getDashboardStats(req, res, next) {
     try {
         const stats = await paymentService.getDashboardStats();
         res.json(stats);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function createPendingPayment(req, res, next) {
+    try {
+        const { tenantId } = req.params;
+        const paymentData = {
+            ...req.body,
+            status: 'Pending'
+        };
+        
+        const payment = await paymentService.createPendingPayment(tenantId, paymentData);
+        res.status(201).json(payment);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function confirmPayment(req, res, next) {
+    try {
+        const { paymentId } = req.params;
+        const payment = await paymentService.confirmPayment(paymentId, req.user.id);
+        res.json(payment);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getPendingPayments(req, res, next) {
+    try {
+        const payments = await paymentService.getPendingPayments();
+        res.json(payments);
     } catch (error) {
         next(error);
     }
