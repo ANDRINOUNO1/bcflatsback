@@ -9,7 +9,11 @@ module.exports = {
     getTenantsWithBillingInfo,
     processPayment,
     accrueMonthlyChargesIfNeeded,
-    getDashboardStats
+    getDashboardStats,
+    createPendingPayment,
+    confirmPayment,
+    getPendingPayments,
+    getPaymentById
 };
 
 async function recordPayment(paymentData) {
@@ -348,5 +352,146 @@ async function getDashboardStats() {
         };
     } catch (error) {
         throw new Error(`Failed to get dashboard stats: ${error.message}`);
+    }
+}
+
+// Create pending payment (for tenant submission)
+async function createPendingPayment(tenantId, paymentData) {
+    try {
+        const { amount, paymentMethod, referenceNumber, description } = paymentData;
+        
+        if (!tenantId || !amount || !paymentMethod) {
+            throw new Error('Missing required fields: tenantId, amount, paymentMethod');
+        }
+
+        const tenant = await db.Tenant.findByPk(tenantId);
+        if (!tenant) {
+            throw new Error('Tenant not found');
+        }
+
+        if (tenant.status !== 'Active') {
+            throw new Error('Cannot create payment for inactive tenant');
+        }
+
+        const paymentAmount = parseFloat(amount);
+        if (paymentAmount <= 0) {
+            throw new Error('Payment amount must be greater than 0');
+        }
+
+        // Validate payment method
+        if (!['gcash', 'paymaya'].includes(paymentMethod.toLowerCase())) {
+            throw new Error('Payment method must be either GCash or PayMaya');
+        }
+
+        const currentBalance = tenant.getOutstandingBalance();
+
+        const payment = await db.Payment.create({
+            tenantId,
+            amount: paymentAmount,
+            paymentDate: new Date(),
+            paymentMethod: paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1),
+            reference: referenceNumber || null,
+            description: description || 'Rent payment',
+            balanceBefore: currentBalance,
+            balanceAfter: currentBalance, // Balance doesn't change until confirmed
+            processedBy: null, // Will be set when confirmed
+            status: 'Pending'
+        });
+
+        return await getPaymentById(payment.id);
+    } catch (error) {
+        throw new Error(`Failed to create pending payment: ${error.message}`);
+    }
+}
+
+// Confirm pending payment (for accounting)
+async function confirmPayment(paymentId, processedBy) {
+    const transaction = await db.sequelize.transaction();
+    try {
+        const payment = await db.Payment.findByPk(paymentId, { transaction });
+        
+        if (!payment) {
+            throw new Error('Payment not found');
+        }
+
+        if (payment.status !== 'Pending') {
+            throw new Error('Payment is not pending confirmation');
+        }
+
+        const tenant = await db.Tenant.findByPk(payment.tenantId, { transaction });
+        if (!tenant) {
+            throw new Error('Tenant not found');
+        }
+
+        if (tenant.status !== 'Active') {
+            throw new Error('Cannot confirm payment for inactive tenant');
+        }
+
+        // Update tenant balance
+        const balanceUpdate = await tenant.makePayment(payment.amount, { transaction });
+        
+        // Update payment status
+        payment.status = 'Completed';
+        payment.processedBy = processedBy;
+        payment.balanceAfter = balanceUpdate.balanceAfter;
+        await payment.save({ transaction });
+
+        await transaction.commit();
+
+        return await getPaymentById(payment.id);
+    } catch (error) {
+        await transaction.rollback();
+        throw new Error(`Failed to confirm payment: ${error.message}`);
+    }
+}
+
+// Get pending payments for accounting
+async function getPendingPayments() {
+    try {
+        const payments = await db.Payment.findAll({
+            where: { status: 'Pending' },
+            include: [
+                {
+                    model: db.Tenant,
+                    as: 'tenant',
+                    attributes: ['id'],
+                    include: [
+                        {
+                            model: db.Account,
+                            as: 'account',
+                            attributes: ['id', 'firstName', 'lastName', 'email']
+                        },
+                        {
+                            model: db.Room,
+                            as: 'room',
+                            attributes: ['id', 'roomNumber', 'floor', 'building']
+                        }
+                    ]
+                }
+            ],
+            order: [['createdAt', 'ASC']]
+        });
+
+        return payments.map(payment => ({
+            id: payment.id,
+            amount: parseFloat(payment.amount),
+            paymentDate: payment.paymentDate,
+            paymentMethod: payment.paymentMethod,
+            reference: payment.reference,
+            description: payment.description,
+            balanceBefore: parseFloat(payment.balanceBefore),
+            status: payment.status,
+            createdAt: payment.createdAt,
+            tenant: {
+                id: payment.tenant.id,
+                name: `${payment.tenant.account.firstName} ${payment.tenant.account.lastName}`,
+                email: payment.tenant.account.email,
+                roomNumber: payment.tenant.room.roomNumber,
+                floor: payment.tenant.room.floor,
+                building: payment.tenant.room.building
+            }
+        }));
+    } catch (error) {
+        throw new Error(`Failed to get pending payments: ${error.message}`);
     }
 }
