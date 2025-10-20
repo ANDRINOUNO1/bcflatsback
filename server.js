@@ -41,6 +41,27 @@ app.get('/api/test', (req, res) => {
   });
 });
 
+// Debug endpoint to check accounts
+app.get('/api/debug/accounts', async (req, res) => {
+  try {
+    const db = require('./_helpers/db');
+    const accounts = await db.Account.findAll();
+    console.log('📊 Found accounts:', accounts.length);
+    res.json({ 
+      count: accounts.length,
+      accounts: accounts.map(acc => ({ 
+        id: acc.id, 
+        email: acc.email, 
+        role: acc.role, 
+        status: acc.status 
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error fetching accounts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 app.get('/api/test-auth', ...authorize(), (req, res) => {
   res.json({ 
