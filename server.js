@@ -31,6 +31,16 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'BCFlats Backend is running' });
 });
 
+// Test endpoint for debugging
+app.get('/api/test', (req, res) => {
+  console.log('🧪 Test endpoint hit from:', req.headers.origin);
+  res.json({ 
+    message: 'Backend is working!', 
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin 
+  });
+});
+
 
 app.get('/api/test-auth', ...authorize(), (req, res) => {
   res.json({ 
