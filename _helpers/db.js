@@ -38,6 +38,7 @@ db.initialize = async function() {
         db.Tenant = require('../tenants/tenant.model')(sequelize, DataTypes);
         db.Maintenance = require('../maintenance/maintenance.model')(sequelize, DataTypes);
         db.Payment = require('../payments/payment.model')(sequelize, DataTypes);
+        db.Notification = require('../notifications/notification.model')(sequelize, DataTypes);
         db.BillingCycle = require('../payments/billing-cycle.model')(sequelize, DataTypes);
 
         // define relationships
@@ -66,6 +67,12 @@ db.initialize = async function() {
         // Billing cycles
         db.Tenant.hasMany(db.BillingCycle, { foreignKey: 'tenantId', as: 'billingCycles' });
         db.BillingCycle.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
+
+        // Notifications
+        db.Account.hasMany(db.Notification, { foreignKey: 'recipientAccountId', as: 'notifications' });
+        db.Notification.belongsTo(db.Account, { foreignKey: 'recipientAccountId', as: 'recipientAccount' });
+        db.Tenant.hasMany(db.Notification, { foreignKey: 'tenantId', as: 'tenantNotifications' });
+        db.Notification.belongsTo(db.Tenant, { foreignKey: 'tenantId', as: 'tenant' });
 
         await sequelize.sync({ force: false });
         console.log('Database synchronized successfully');

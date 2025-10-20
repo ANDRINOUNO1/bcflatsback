@@ -24,6 +24,10 @@ router.get('/search/account/:accountId', ...authorize(), getTenantsByAccount);
 router.get('/search/room/:roomId', ...authorize(), getTenantsByRoom);
 router.get('/:id/billing-info', ...authorize(), getTenantBillingInfo);
 
+// Archived tenants routes
+router.get('/archived/list', ...authorize(['Admin', 'SuperAdmin']), getArchivedTenants);
+router.get('/archived/:id', ...authorize(['Admin', 'SuperAdmin']), getArchivedTenantById);
+
 module.exports = router;
 
 // Controller functions
@@ -159,6 +163,36 @@ async function getTenantBillingInfo(req, res, next) {
             return res.status(404).json({ message: 'Tenant not found' });
         }
         res.json(billingInfo);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getArchivedTenants(req, res, next) {
+    try {
+        const { search, dateFrom, dateTo, floor, sortBy, sortOrder } = req.query;
+        const filters = {
+            search,
+            dateFrom,
+            dateTo,
+            floor,
+            sortBy,
+            sortOrder
+        };
+        const archivedTenants = await tenantService.getArchivedTenants(filters);
+        res.json(archivedTenants);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getArchivedTenantById(req, res, next) {
+    try {
+        const archivedTenant = await tenantService.getArchivedTenantById(req.params.id);
+        if (!archivedTenant) {
+            return res.status(404).json({ message: 'Archived tenant not found' });
+        }
+        res.json(archivedTenant);
     } catch (error) {
         next(error);
     }

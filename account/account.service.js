@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const db = require('../_helpers/db');
+const notificationHelper = require('../notifications/notification.helper');
 
 module.exports = {
     authenticate,
@@ -108,6 +109,14 @@ async function create(params) {
 
     // save
     await account.save();
+    
+    // Send notification
+    try {
+        await notificationHelper.notifyAccountCreated(account);
+    } catch (e) {
+        console.warn('Failed to send account creation notification:', e.message);
+    }
+    
     return basicDetails(account);
 }
 
@@ -149,6 +158,14 @@ async function approveAccount(id) {
     account.status = 'Active';
     account.updated = Date.now();
     await account.save();
+    
+    // Send notification
+    try {
+        await notificationHelper.notifyAccountApproved(account);
+    } catch (e) {
+        console.warn('Failed to send approval notification:', e.message);
+    }
+    
     return basicDetails(account);
 }
 
@@ -157,6 +174,14 @@ async function rejectAccount(id, reason) {
     account.status = 'Rejected';
     account.updated = Date.now();
     await account.save();
+    
+    // Send notification
+    try {
+        await notificationHelper.notifyAccountRejected(account, reason);
+    } catch (e) {
+        console.warn('Failed to send rejection notification:', e.message);
+    }
+    
     return { ...basicDetails(account), rejectionReason: reason || null };
 }
 
@@ -178,9 +203,20 @@ async function setStatus(id, status) {
         throw 'Invalid status';
     }
     const account = await getAccount(id);
+    const oldStatus = account.status;
     account.status = status;
     account.updated = Date.now();
     await account.save();
+    
+    // Send notification if status changed
+    try {
+        if (oldStatus !== status) {
+            await notificationHelper.notifyAccountStatusChanged(account, oldStatus, status);
+        }
+    } catch (e) {
+        console.warn('Failed to send status change notification:', e.message);
+    }
+    
     return basicDetails(account);
 }
 
