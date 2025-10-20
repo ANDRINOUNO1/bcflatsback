@@ -1,5 +1,7 @@
 const db = require('../_helpers/db');
 const { Op } = require('sequelize');
+const notifications = require('../notifications/notification.service');
+const notificationHelper = require('../notifications/notification.helper');
 
 module.exports = {
     recordPayment,
@@ -58,7 +60,16 @@ async function recordPayment(paymentData) {
 
         await transaction.commit();
 
-        return await getPaymentById(payment.id);
+        const saved = await getPaymentById(payment.id);
+
+        // Send notifications using helper
+        try {
+            await notificationHelper.notifyPaymentReceived(saved, saved.tenant);
+        } catch (e) {
+            console.warn('Notification dispatch failed:', e.message);
+        }
+
+        return saved;
     } catch (error) {
         await transaction.rollback();
         throw new Error(`Failed to record payment: ${error.message}`);
@@ -181,24 +192,60 @@ async function getTenantsWithBillingInfo() {
             order: [['outstandingBalance', 'DESC'], ['nextDueDate', 'ASC']]
         });
 
-        return tenants.map(tenant => ({
-            id: tenant.id,
-            name: `${tenant.account.firstName} ${tenant.account.lastName}`,
-            email: tenant.account.email,
-            roomNumber: tenant.room.roomNumber,
-            floor: tenant.room.floor,
-            building: tenant.room.building,
-            monthlyRent: parseFloat(tenant.monthlyRent),
-            utilities: parseFloat(tenant.utilities),
-            totalMonthlyCost: tenant.getTotalCost(),
-            outstandingBalance: tenant.getOutstandingBalance(),
-            lastPaymentDate: tenant.lastPaymentDate,
-            nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate(),
-            checkInDate: tenant.checkInDate,
-            leaseStart: tenant.leaseStart,
-            leaseEnd: tenant.leaseEnd,
-            status: tenant.status
+        // Map tenants with corrected outstanding balance
+        const tenantList = await Promise.all(tenants.map(async tenant => {
+            // Get billing cycles to calculate deposit correction
+            const billingCycles = await db.BillingCycle.findAll({
+                where: { tenantId: tenant.id },
+                order: [['cycleMonth', 'DESC']],
+                limit: 6
+            });
+
+            const totalDepositApplied = billingCycles.reduce((sum, c) => sum + parseFloat(c.depositApplied || 0), 0);
+            const totalMonthly = tenant.getTotalCost();
+            const originalBalance = tenant.getOutstandingBalance();
+
+            // Calculate corrected outstanding balance (same logic as getTenantBillingInfo)
+            let correctedOutstanding;
+            if (totalDepositApplied > 0) {
+                // Deposit was applied - show balance minus total deposit applied
+                correctedOutstanding = Math.max(0, originalBalance - totalDepositApplied);
+            } else {
+                // No deposit applied yet - use as-is
+                correctedOutstanding = originalBalance;
+            }
+
+            console.log(`[Accounting - Tenant ${tenant.id}] ${tenant.account.firstName} ${tenant.account.lastName}:`, {
+                originalBalance,
+                totalDepositApplied,
+                correctedOutstanding,
+                deposit: tenant.deposit
+            });
+
+            return {
+                id: tenant.id,
+                name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                email: tenant.account.email,
+                roomNumber: tenant.room.roomNumber,
+                floor: tenant.room.floor,
+                building: tenant.room.building,
+                monthlyRent: parseFloat(tenant.monthlyRent),
+                utilities: parseFloat(tenant.utilities),
+                totalMonthlyCost: totalMonthly,
+                outstandingBalance: correctedOutstanding,
+                correctedOutstandingBalance: correctedOutstanding,
+                lastPaymentDate: tenant.lastPaymentDate,
+                nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate(),
+                checkInDate: tenant.checkInDate,
+                leaseStart: tenant.leaseStart,
+                leaseEnd: tenant.leaseEnd,
+                status: tenant.status,
+                deposit: parseFloat(tenant.deposit || 0),
+                depositApplied: totalDepositApplied
+            };
         }));
+
+        return tenantList;
     } catch (error) {
         throw new Error(`Failed to get tenants with billing info: ${error.message}`);
     }
@@ -238,34 +285,78 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
     const currentCycleMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     const whereTenant = targetTenantId ? { id: targetTenantId } : { status: 'Active' };
-    const tenants = await db.Tenant.findAll({ where: whereTenant });
+        const tenants = await db.Tenant.findAll({ where: whereTenant });
 
     for (const tenant of tenants) {
-        // Skip if already accrued for this month
+        // Skip if already accrued for this month, but apply deposit correction if missed
         const existing = await db.BillingCycle.findOne({ where: { tenantId: tenant.id, cycleMonth: currentCycleMonth } });
-        if (existing) continue;
-
-        const previousBalance = tenant.getOutstandingBalance();
-        let depositApplied = 0;
-
-        // Apply deposit as credit once when outstanding is zero or at first cycle
-        if (tenant.deposit && !tenant.depositPaid) { 
-            depositApplied = Math.min(previousBalance, parseFloat(tenant.deposit));
-            // If there is no previous balance, carry deposit as negative balance (credit)
-            if (previousBalance <= 0) {
-                depositApplied = parseFloat(tenant.deposit);
+        if (existing) {
+            try {
+                const anyDepositApplied = await db.BillingCycle.findOne({
+                    where: { tenantId: tenant.id, depositApplied: { [Op.gt]: 0 } }
+                });
+                if (!anyDepositApplied && parseFloat(tenant.deposit) > 0 && parseFloat(existing.depositApplied || 0) === 0) {
+                    const adjust = Math.min(parseFloat(tenant.deposit), parseFloat(existing.monthlyCharges || 0));
+                    if (adjust > 0) {
+                        existing.depositApplied = adjust.toFixed(2);
+                        const existingFinal = parseFloat(existing.finalBalance || 0);
+                        existing.finalBalance = Math.max(0, existingFinal - adjust).toFixed(2);
+                        tenant.outstandingBalance = Math.max(0, tenant.getOutstandingBalance() - adjust);
+                        tenant.depositPaid = true;
+                        await existing.save();
+                        await tenant.save();
+                        try {
+                            await notifications.createNotification({
+                                recipientRole: 'Tenant',
+                                recipientAccountId: tenant.accountId,
+                                tenantId: tenant.id,
+                                type: 'billing_correction',
+                                title: 'Security deposit applied',
+                                message: `We applied your security deposit of ${adjust.toFixed(2)} to this month's charges.`,
+                                metadata: { cycleMonth: currentCycleMonth, adjustment: adjust }
+                            });
+                            await notifications.broadcastToRoles({
+                                roles: ['Accounting', 'Admin', 'SuperAdmin'],
+                                tenantId: tenant.id,
+                                type: 'billing_correction',
+                                title: 'Security deposit correction applied',
+                                message: `Applied deposit ${adjust.toFixed(2)} to tenant #${tenant.id}'s current cycle.`,
+                                metadata: { cycleMonth: currentCycleMonth, adjustment: adjust }
+                            });
+                        } catch (e) {
+                            console.warn('Notification dispatch failed:', e.message);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('Deposit correction failed:', e.message);
             }
-            // Update tenant to mark deposit applied and reduce balance
-            tenant.outstandingBalance = Math.max(0, previousBalance - depositApplied);
-            tenant.depositPaid = true;
-            await tenant.save();
+            continue;
         }
 
+        const previousBalance = tenant.getOutstandingBalance();
         const monthlyCharges = parseFloat(tenant.monthlyRent) + parseFloat(tenant.utilities);
+        let depositApplied = 0;
+        let chargesThisCycle = monthlyCharges;
 
-        // Update balance with monthly charges
-        const balanceBeforeCharges = tenant.getOutstandingBalance();
-        const finalBalance = balanceBeforeCharges + monthlyCharges;
+        // Robust deposit handling: apply deposit once on the first ever billing cycle,
+        // or if never recorded in any cycle (correction), regardless of depositPaid flag.
+        const totalCycles = await db.BillingCycle.count({ where: { tenantId: tenant.id } });
+        const depositCycle = await db.BillingCycle.findOne({ 
+            where: { tenantId: tenant.id, depositApplied: { [Op.gt]: 0 } } 
+        });
+        const shouldApplyDeposit = (totalCycles === 0 || !depositCycle) && parseFloat(tenant.deposit) > 0;
+        if (shouldApplyDeposit) {
+            depositApplied = Math.max(0, parseFloat(tenant.deposit));
+            // Apply only against this month's charges per spec
+            depositApplied = Math.min(depositApplied, monthlyCharges);
+            chargesThisCycle = Math.max(0, monthlyCharges - depositApplied);
+            if (!tenant.depositPaid) {
+                tenant.depositPaid = true;
+            }
+        }
+
+        const finalBalance = previousBalance + chargesThisCycle;
         tenant.outstandingBalance = finalBalance;
         tenant.nextDueDate = tenant.calculateNextDueDate();
         await tenant.save();
@@ -273,7 +364,7 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
         // Sum payments made in this cycle month (optional; 0 default, actual payments will be recorded as they occur)
         const paymentsMade = 0;
 
-        await db.BillingCycle.create({
+        const cycle = await db.BillingCycle.create({
             tenantId: tenant.id,
             cycleMonth: currentCycleMonth,
             previousBalance: previousBalance.toFixed(2),
@@ -282,6 +373,29 @@ async function accrueMonthlyChargesIfNeeded(targetTenantId = null) {
             paymentsMade: paymentsMade.toFixed(2),
             finalBalance: finalBalance.toFixed(2)
         });
+
+        // Notifications for monthly accrual and balance update
+        try {
+            await notifications.createNotification({
+                recipientRole: 'Tenant',
+                recipientAccountId: tenant.accountId,
+                tenantId: tenant.id,
+                type: 'billing_update',
+                title: 'Monthly charges posted',
+                message: `This month's charges: ${(monthlyCharges).toFixed(2)}. Remaining balance: ${finalBalance.toFixed(2)}.`,
+                metadata: { cycleMonth: currentCycleMonth, cycleId: cycle.id, monthlyCharges, finalBalance, depositApplied }
+            });
+            await notifications.broadcastToRoles({
+                roles: ['Accounting', 'Admin', 'SuperAdmin'],
+                tenantId: tenant.id,
+                type: 'billing_update',
+                title: 'Tenant balance updated',
+                message: `Tenant #${tenant.id} monthly accrual. Final balance: ${finalBalance.toFixed(2)}.`,
+                metadata: { cycleMonth: currentCycleMonth, tenantId: tenant.id, finalBalance }
+            });
+        } catch (e) {
+            console.warn('Notification dispatch failed:', e.message);
+        }
     }
 }
 
@@ -438,7 +552,30 @@ async function confirmPayment(paymentId, processedBy) {
 
         await transaction.commit();
 
-        return await getPaymentById(payment.id);
+        const saved = await getPaymentById(payment.id);
+        try {
+            await notifications.createNotification({
+                recipientRole: 'Tenant',
+                recipientAccountId: saved.tenant.account.id,
+                tenantId: saved.tenant.id,
+                type: 'payment_confirmed',
+                title: 'Payment confirmed',
+                message: `Your payment of ${parseFloat(saved.amount).toFixed(2)} was confirmed. Remaining balance: ${parseFloat(saved.balanceAfter).toFixed(2)}.`,
+                metadata: { paymentId: saved.id, balanceAfter: saved.balanceAfter }
+            });
+            await notifications.broadcastToRoles({
+                roles: ['Accounting', 'Admin', 'SuperAdmin'],
+                tenantId: saved.tenant.id,
+                type: 'payment_confirmed',
+                title: 'Payment confirmed',
+                message: `Payment for tenant #${saved.tenant.id} confirmed. New balance: ${parseFloat(saved.balanceAfter).toFixed(2)}.`,
+                metadata: { paymentId: saved.id }
+            });
+        } catch (e) {
+            console.warn('Notification dispatch failed:', e.message);
+        }
+
+        return saved;
     } catch (error) {
         await transaction.rollback();
         throw new Error(`Failed to confirm payment: ${error.message}`);

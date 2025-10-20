@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const paymentService = require('./payment.service');
 const authorize = require('../_middleware/authorize');
+const db = require('../_helpers/db');
+const notifications = require('../notifications/notification.service');
 
 // Protected routes (require authentication)
 // Backwards-compatible tenant history route
@@ -56,6 +58,26 @@ async function getRecentPayments(req, res, next) {
 async function getTenantsWithBillingInfo(req, res, next) {
     try {
         const tenants = await paymentService.getTenantsWithBillingInfo();
+        // Create overdue notifications for accounting/admin if needed (debounced)
+        const now = new Date();
+        const overdueTenants = tenants.filter(t => t.outstandingBalance > 0 && t.nextDueDate && new Date(t.nextDueDate) < now);
+        for (const t of overdueTenants) {
+            try {
+                const already = await notifications.hasRecentNotification({ tenantId: t.id, type: 'overdue_notice', days: 2 });
+                if (!already) {
+                    await notifications.broadcastToRoles({
+                        roles: ['Accounting', 'Admin', 'SuperAdmin'],
+                        tenantId: t.id,
+                        type: 'overdue_notice',
+                        title: 'Overdue balance',
+                        message: `Tenant #${t.id} is overdue. Balance: ${parseFloat(t.outstandingBalance).toFixed(2)}.`,
+                        metadata: { tenantId: t.id, outstandingBalance: t.outstandingBalance }
+                    });
+                }
+            } catch (e) {
+                console.warn('Overdue notification error:', e.message);
+            }
+        }
         res.json(tenants);
     } catch (error) {
         next(error);

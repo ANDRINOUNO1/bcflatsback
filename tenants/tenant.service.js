@@ -14,10 +14,12 @@ module.exports = {
     updateTenantStatus,
     getTenantsByAccount,
     getTenantsByRoom,
-    getTenantBillingInfo
+    getTenantBillingInfo,
+    getArchivedTenants,
+    getArchivedTenantById
 };
 
-// Get all tenants with account and room information
+// Get all tenants with account and room information (excludes checked out tenants)
 async function getAllTenants(floor) {
     try {
         const roomInclude = {
@@ -32,6 +34,9 @@ async function getAllTenants(floor) {
         }
 
         const tenants = await db.Tenant.findAll({
+            where: {
+                status: { [Op.ne]: 'Checked Out' } // Exclude checked out tenants
+            },
             include: [
                 {
                     model: db.Account,
@@ -322,20 +327,51 @@ async function checkInTenant(id) {
 // Check out tenant
 async function checkOutTenant(id) {
     try {
-        const tenant = await db.Tenant.findByPk(id);
+        const tenant = await db.Tenant.findByPk(id, {
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building']
+                }
+            ]
+        });
         if (!tenant) return null;
 
         if (tenant.status !== 'Active') {
             throw new Error('Tenant is not currently checked in');
         }
 
+        // Check out tenant (sets status to "Checked Out")
         await tenant.checkOut();
+
+        // Suspend the associated account
+        const account = await db.Account.findByPk(tenant.accountId);
+        if (account) {
+            account.status = 'Suspended';
+            await account.save();
+            console.log(`Account ${account.email} suspended after tenant checkout`);
+        }
 
         // Update room occupancy
         const room = await db.Room.findByPk(tenant.roomId);
         if (room) {
             await room.removeTenant();
         }
+
+        // Create archive notification for Admin and SuperAdmin
+        const notificationService = require('../notifications/notification.service');
+        await notificationService.createNotificationByRole(
+            ['Admin', 'SuperAdmin'],
+            'Tenant Checked Out - Archived',
+            `${tenant.account.firstName} ${tenant.account.lastName} from Room ${tenant.room.roomNumber} has been checked out and archived. Account suspended. Outstanding balance: ₱${tenant.getOutstandingBalance().toFixed(2)}`,
+            'tenant'
+        );
 
         return await getTenantById(id);
     } catch (error) {
@@ -410,6 +446,16 @@ async function getTenantsByRoom(roomId) {
 // Get comprehensive billing information for a specific tenant
 async function getTenantBillingInfo(tenantId) {
     try {
+        // Ensure accruals (and deposit application) are up to date for this tenant before reading
+        try {
+            const paymentService = require('../payments/payment.service');
+            if (typeof paymentService.accrueMonthlyChargesIfNeeded === 'function') {
+                await paymentService.accrueMonthlyChargesIfNeeded(tenantId);
+            }
+        } catch (e) {
+            console.warn('Accrual prefetch failed:', e.message);
+        }
+
         const tenant = await db.Tenant.findByPk(tenantId, {
             include: [
                 {
@@ -443,6 +489,47 @@ async function getTenantBillingInfo(tenantId) {
             limit: 6
         });
 
+        const anyDepositApplied = billingCycles.some(c => parseFloat(c.depositApplied || 0) > 0);
+        const totalMonthly = tenant.getTotalCost();
+        
+        // Calculate what balance SHOULD be based on actual deposit applied
+        const totalDepositApplied = billingCycles.reduce((sum, c) => sum + parseFloat(c.depositApplied || 0), 0);
+        // Use the LATEST cycle's finalBalance as the expected balance (not the sum)
+        const expectedBalance = billingCycles.length > 0 ? parseFloat(billingCycles[0].finalBalance || 0) : tenant.getOutstandingBalance();
+        
+        // For UI display: always show balance with deposit deducted if it was applied
+        // The actual ledger (outstandingBalance) remains correct, but we show a "display balance"
+        // that reflects what the tenant should see after deposit consideration
+        let correctedOutstanding;
+        if (totalDepositApplied > 0) {
+            // Deposit was applied in billing cycles - show original balance minus the deposit applied
+            correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - totalDepositApplied);
+        } else if (!anyDepositApplied) {
+            // First time - compute deposit credit for display
+            const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
+            correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - computedCredit);
+        } else {
+            // Fallback - use as-is
+            correctedOutstanding = tenant.getOutstandingBalance();
+        }
+        
+        console.log(`[Tenant ${tenantId}] Balance Calculation:`, {
+            originalBalance: tenant.getOutstandingBalance(),
+            deposit: tenant.deposit,
+            totalMonthly,
+            anyDepositApplied,
+            totalDepositApplied,
+            expectedBalance,
+            correctedOutstanding,
+            cyclesCount: billingCycles.length,
+            cycles: billingCycles.map(c => ({
+                month: c.cycleMonth,
+                depositApplied: c.depositApplied,
+                charges: c.monthlyCharges,
+                finalBalance: c.finalBalance
+            }))
+        });
+
         return {
             id: tenant.id,
             name: `${tenant.account.firstName} ${tenant.account.lastName}`,
@@ -453,7 +540,8 @@ async function getTenantBillingInfo(tenantId) {
             monthlyRent: parseFloat(tenant.monthlyRent),
             utilities: parseFloat(tenant.utilities),
             totalMonthlyCost: tenant.getTotalCost(),
-            outstandingBalance: tenant.getOutstandingBalance(),
+            outstandingBalance: correctedOutstanding,
+            correctedOutstandingBalance: correctedOutstanding,
             deposit: parseFloat(tenant.deposit || 0),
             lastPaymentDate: tenant.lastPaymentDate,
             nextDueDate: tenant.nextDueDate || tenant.calculateNextDueDate(),
@@ -479,9 +567,214 @@ async function getTenantBillingInfo(tenantId) {
                 monthlyCharges: parseFloat(cycle.monthlyCharges),
                 paymentsMade: parseFloat(cycle.paymentsMade),
                 finalBalance: parseFloat(cycle.finalBalance)
-            }))
+            })),
+            depositAppliedThisCycle: anyDepositApplied,
+            depositAppliedAmount: totalDepositApplied
         };
     } catch (error) {
         throw new Error(`Failed to get tenant billing info: ${error.message}`);
+    }
+}
+
+// Get archived (checked out) tenants with search and filter
+async function getArchivedTenants(filters = {}) {
+    try {
+        const { search, dateFrom, dateTo, floor, sortBy = 'checkOutDate', sortOrder = 'DESC' } = filters;
+
+        // Build where clause
+        const whereClause = {
+            status: 'Checked Out'
+        };
+
+        // Search filter (name, email, room number)
+        if (search && search.trim() !== '') {
+            whereClause[Op.or] = [
+                { '$account.firstName$': { [Op.like]: `%${search}%` } },
+                { '$account.lastName$': { [Op.like]: `%${search}%` } },
+                { '$account.email$': { [Op.like]: `%${search}%` } },
+                { '$room.roomNumber$': { [Op.like]: `%${search}%` } }
+            ];
+        }
+
+        // Date range filter
+        if (dateFrom || dateTo) {
+            whereClause.checkOutDate = {};
+            if (dateFrom) {
+                whereClause.checkOutDate[Op.gte] = new Date(dateFrom);
+            }
+            if (dateTo) {
+                const endDate = new Date(dateTo);
+                endDate.setHours(23, 59, 59, 999);
+                whereClause.checkOutDate[Op.lte] = endDate;
+            }
+        }
+
+        // Floor filter
+        const roomInclude = {
+            model: db.Room,
+            as: 'room',
+            attributes: ['id', 'roomNumber', 'floor', 'building']
+        };
+        if (floor !== undefined && floor !== null && floor !== '') {
+            roomInclude.where = { floor };
+        }
+
+        // Fetch archived tenants
+        const archivedTenants = await db.Tenant.findAll({
+            where: whereClause,
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'title']
+                },
+                roomInclude
+            ],
+            order: [[sortBy, sortOrder]],
+            subQuery: false
+        });
+
+        // Get payment history for each archived tenant
+        const tenantsWithHistory = await Promise.all(archivedTenants.map(async tenant => {
+            const payments = await db.Payment.findAll({
+                where: { tenantId: tenant.id },
+                order: [['paymentDate', 'DESC']]
+            });
+
+            const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+            const billingCycles = await db.BillingCycle.findAll({
+                where: { tenantId: tenant.id },
+                order: [['cycleMonth', 'DESC']]
+            });
+
+            const totalCharges = billingCycles.reduce((sum, c) => sum + parseFloat(c.monthlyCharges || 0), 0);
+            const totalDepositApplied = billingCycles.reduce((sum, c) => sum + parseFloat(c.depositApplied || 0), 0);
+
+            return {
+                id: tenant.id,
+                name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                email: tenant.account.email,
+                roomNumber: tenant.room.roomNumber,
+                floor: tenant.room.floor,
+                building: tenant.room.building,
+                checkInDate: tenant.checkInDate,
+                checkOutDate: tenant.checkOutDate,
+                leaseStart: tenant.leaseStart,
+                leaseEnd: tenant.leaseEnd,
+                monthlyRent: parseFloat(tenant.monthlyRent),
+                utilities: parseFloat(tenant.utilities),
+                deposit: parseFloat(tenant.deposit || 0),
+                depositPaid: tenant.depositPaid,
+                depositApplied: totalDepositApplied,
+                finalBalance: tenant.getOutstandingBalance(),
+                totalPaid: totalPaid,
+                totalCharges: totalCharges,
+                paymentCount: payments.length,
+                billingCycleCount: billingCycles.length,
+                status: tenant.status,
+                emergencyContact: tenant.emergencyContact,
+                notes: tenant.notes
+            };
+        }));
+
+        return tenantsWithHistory;
+    } catch (error) {
+        throw new Error(`Failed to get archived tenants: ${error.message}`);
+    }
+}
+
+// Get detailed information for a specific archived tenant
+async function getArchivedTenantById(id) {
+    try {
+        const tenant = await db.Tenant.findByPk(id, {
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email', 'title']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building', 'monthlyRent', 'utilities']
+                }
+            ]
+        });
+
+        if (!tenant || tenant.status !== 'Checked Out') {
+            return null;
+        }
+
+        // Get complete payment history
+        const payments = await db.Payment.findAll({
+            where: { tenantId: tenant.id },
+            order: [['paymentDate', 'DESC']]
+        });
+
+        // Get billing cycles
+        const billingCycles = await db.BillingCycle.findAll({
+            where: { tenantId: tenant.id },
+            order: [['cycleMonth', 'DESC']]
+        });
+
+        // Calculate statistics
+        const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        const totalCharges = billingCycles.reduce((sum, c) => sum + parseFloat(c.monthlyCharges || 0), 0);
+        const totalDepositApplied = billingCycles.reduce((sum, c) => sum + parseFloat(c.depositApplied || 0), 0);
+
+        // Calculate days stayed
+        const checkIn = new Date(tenant.checkInDate);
+        const checkOut = new Date(tenant.checkOutDate);
+        const daysStayed = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+
+        return {
+            id: tenant.id,
+            name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+            email: tenant.account.email,
+            title: tenant.account.title,
+            roomNumber: tenant.room.roomNumber,
+            floor: tenant.room.floor,
+            building: tenant.room.building,
+            bedNumber: tenant.bedNumber,
+            checkInDate: tenant.checkInDate,
+            checkOutDate: tenant.checkOutDate,
+            daysStayed: daysStayed,
+            leaseStart: tenant.leaseStart,
+            leaseEnd: tenant.leaseEnd,
+            monthlyRent: parseFloat(tenant.monthlyRent),
+            utilities: parseFloat(tenant.utilities),
+            totalMonthlyCost: tenant.getTotalCost(),
+            deposit: parseFloat(tenant.deposit || 0),
+            depositPaid: tenant.depositPaid,
+            depositApplied: totalDepositApplied,
+            finalBalance: tenant.getOutstandingBalance(),
+            totalPaid: totalPaid,
+            totalCharges: totalCharges,
+            emergencyContact: tenant.emergencyContact,
+            specialRequirements: tenant.specialRequirements,
+            notes: tenant.notes,
+            status: tenant.status,
+            paymentHistory: payments.map(payment => ({
+                id: payment.id,
+                amount: parseFloat(payment.amount),
+                paymentDate: payment.paymentDate,
+                paymentMethod: payment.paymentMethod,
+                reference: payment.reference,
+                description: payment.description,
+                balanceAfter: parseFloat(payment.balanceAfter),
+                status: payment.status
+            })),
+            billingCycles: billingCycles.map(cycle => ({
+                id: cycle.id,
+                cycleMonth: cycle.cycleMonth,
+                previousBalance: parseFloat(cycle.previousBalance),
+                depositApplied: parseFloat(cycle.depositApplied),
+                monthlyCharges: parseFloat(cycle.monthlyCharges),
+                paymentsMade: parseFloat(cycle.paymentsMade),
+                finalBalance: parseFloat(cycle.finalBalance)
+            }))
+        };
+    } catch (error) {
+        throw new Error(`Failed to get archived tenant details: ${error.message}`);
     }
 }
