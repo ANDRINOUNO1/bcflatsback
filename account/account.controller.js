@@ -22,9 +22,16 @@ module.exports = router;
 
 //  Authenticate
 function authenticate(req, res, next) {
+  console.log('🔐 Authentication request for:', req.body.email);
   accountService.authenticate(req.body)
-    .then(account => res.json(account))
-    .catch(next);
+    .then(account => {
+      console.log('✅ Authentication successful, returning:', account);
+      res.json(account);
+    })
+    .catch(error => {
+      console.error('❌ Authentication failed:', error);
+      next(error);
+    });
 }
 
 // ➕ Register
