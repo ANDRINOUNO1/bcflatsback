@@ -62,6 +62,23 @@ app.get('/api/debug/accounts', async (req, res) => {
   }
 });
 
+// Debug endpoint to test authentication
+app.post('/api/debug/auth', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    console.log('🧪 Debug auth attempt for:', email);
+    
+    const accountService = require('./account/account.service');
+    const result = await accountService.authenticate({ email, password, ipAddress: '127.0.0.1' });
+    
+    console.log('✅ Debug auth successful:', result);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('❌ Debug auth failed:', error);
+    res.status(401).json({ success: false, error: error.message });
+  }
+});
+
 
 app.get('/api/test-auth', ...authorize(), (req, res) => {
   res.json({ 

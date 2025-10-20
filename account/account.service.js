@@ -26,26 +26,48 @@ module.exports = {
 // ================= AUTH =================
 
 async function authenticate({ email, password, ipAddress }) {
+    console.log('🔍 Looking for account with email:', email);
     const account = await db.Account.scope('withHash').findOne({ where: { email } });
+    console.log('📋 Account found:', account ? 'Yes' : 'No');
+    
+    if (account) {
+        console.log('👤 Account details:', { 
+            id: account.id, 
+            email: account.email, 
+            status: account.status,
+            hasPasswordHash: !!account.passwordHash 
+        });
+    }
 
     if (!account || !bcrypt.compareSync(password, account.passwordHash)) {
+        console.log('❌ Authentication failed: Invalid credentials');
         throw 'Email or password is incorrect';
     }
 
     if (account.status !== 'Active') {
+        console.log('❌ Authentication failed: Account not active, status:', account.status);
         throw 'Account is not active. Please contact support.';
     }
 
+    console.log('✅ Credentials valid, generating tokens...');
     // authentication successful
     const jwtToken = generateJwtToken(account);
     const refreshToken = await generateRefreshToken(account, ipAddress);
 
-    // return basic details and tokens
-    return {
+    const result = {
         ...basicDetails(account),
         jwtToken,
         refreshToken: refreshToken.token
     };
+    
+    console.log('🎫 Generated response:', { 
+        hasJwtToken: !!result.jwtToken,
+        hasRefreshToken: !!result.refreshToken,
+        userData: basicDetails(account)
+    });
+
+    // return basic details and tokens
+    return result;
 }
 
 async function refreshToken({ token, ipAddress }) {
