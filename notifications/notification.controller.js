@@ -40,6 +40,31 @@ router.post('/broadcast', ...authorize(Role.SuperAdmin), async (req, res, next) 
     } catch (err) { next(err); }
 });
 
+// Get all announcements (Admin and SuperAdmin only)
+router.get('/announcements', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+    try {
+        const { limit = 50, offset = 0 } = req.query;
+        const announcements = await service.getAllAnnouncements({ limit, offset });
+        res.json(announcements);
+    } catch (err) { next(err); }
+});
+
+// Delete announcement (Admin and SuperAdmin only)
+router.delete('/announcements/:id', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+    try {
+        const result = await service.deleteAnnouncement(req.params.id);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
+// Suspend announcement (Admin and SuperAdmin only)
+router.post('/announcements/:id/suspend', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+    try {
+        const result = await service.suspendAnnouncement(req.params.id);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
 module.exports = router;
 
 

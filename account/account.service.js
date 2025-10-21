@@ -28,12 +28,32 @@ module.exports = {
 async function authenticate({ email, password, ipAddress }) {
     const account = await db.Account.scope('withHash').findOne({ where: { email } });
 
-    if (!account || !bcrypt.compareSync(password, account.passwordHash)) {
-        throw 'Email or password is incorrect';
+    if (!account) {
+        throw 'Account not found. Please check your email address.';
+    }
+
+    if (!bcrypt.compareSync(password, account.passwordHash)) {
+        throw 'Wrong credentials. Please check your password.';
+    }
+
+    if (account.status === 'Pending') {
+        throw 'Account pending approval. Please wait for superadmin approval.';
+    }
+
+    if (account.status === 'Suspended') {
+        throw 'Account suspended. Please contact support for assistance.';
+    }
+
+    if (account.status === 'Rejected') {
+        throw 'Account rejected. Please contact support for more information.';
+    }
+
+    if (account.status === 'Deleted') {
+        throw 'Account deleted. Please contact support for assistance.';
     }
 
     if (account.status !== 'Active') {
-        throw 'Account is not active. Please contact support.';
+        throw 'Account not active. Please contact support.';
     }
 
     // authentication successful
@@ -249,6 +269,6 @@ async function getAccount(id) {
 }
 
 function basicDetails(account) {
-    const { id, title, firstName, lastName, email, role, status, created, updated } = account;
-    return { id, title, firstName, lastName, email, role, status, created, updated };
+    const { id, role, status } = account;
+    return { id, role, status };
 }

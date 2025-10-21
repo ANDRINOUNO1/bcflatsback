@@ -69,7 +69,6 @@ app.get('/api/test-auth', ...authorize(), (req, res) => {
     message: 'Authentication successful',
     user: {
       id: req.user.id,
-      email: req.user.email,
       role: req.user.role,
       status: req.user.status
     }
