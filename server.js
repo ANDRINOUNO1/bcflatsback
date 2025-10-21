@@ -8,7 +8,11 @@ const errorHandler = require('./_middleware/error-handler');
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Allow multiple origins
+  origin: [
+    'http://localhost:5173', 
+    'http://localhost:3000',
+    'https://bcflats.onrender.com'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -27,6 +31,37 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'BCFlats Backend is running' });
 });
 
+// Test endpoint for debugging
+app.get('/api/test', (req, res) => {
+  console.log('🧪 Test endpoint hit from:', req.headers.origin);
+  res.json({ 
+    message: 'Backend is working!', 
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin 
+  });
+});
+
+// Debug endpoint to check accounts
+app.get('/api/debug/accounts', async (req, res) => {
+  try {
+    const db = require('./_helpers/db');
+    const accounts = await db.Account.findAll();
+    console.log('📊 Found accounts:', accounts.length);
+    res.json({ 
+      count: accounts.length,
+      accounts: accounts.map(acc => ({ 
+        id: acc.id, 
+        email: acc.email, 
+        role: acc.role, 
+        status: acc.status 
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error fetching accounts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 app.get('/api/test-auth', ...authorize(), (req, res) => {
   res.json({ 
@@ -34,7 +69,6 @@ app.get('/api/test-auth', ...authorize(), (req, res) => {
     message: 'Authentication successful',
     user: {
       id: req.user.id,
-      email: req.user.email,
       role: req.user.role,
       status: req.user.status
     }

@@ -7,6 +7,9 @@ module.exports = {
     getNotifications,
     broadcastToRoles,
     hasRecentNotification,
+    getAllAnnouncements,
+    deleteAnnouncement,
+    suspendAnnouncement,
 };
 
 async function createNotification({ recipientRole, recipientAccountId = null, tenantId = null, type, title, message, metadata = {} }) {
@@ -73,6 +76,56 @@ async function hasRecentNotification({ tenantId, type, days = 3 }) {
         }
     });
     return !!exists;
+}
+
+async function getAllAnnouncements({ limit = 50, offset = 0 } = {}) {
+    const announcements = await db.Notification.findAll({
+        where: {
+            type: 'system_announcement'
+        },
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        attributes: ['id', 'title', 'message', 'recipientRole', 'metadata', 'isRead', 'createdAt', 'updatedAt']
+    });
+    return announcements;
+}
+
+async function deleteAnnouncement(announcementId) {
+    const announcement = await db.Notification.findByPk(announcementId);
+    if (!announcement) {
+        throw new Error('Announcement not found');
+    }
+    if (announcement.type !== 'system_announcement') {
+        throw new Error('Only system announcements can be deleted');
+    }
+    await announcement.destroy();
+    return { message: 'Announcement deleted successfully' };
+}
+
+async function suspendAnnouncement(announcementId) {
+    const announcement = await db.Notification.findByPk(announcementId);
+    if (!announcement) {
+        throw new Error('Announcement not found');
+    }
+    if (announcement.type !== 'system_announcement') {
+        throw new Error('Only system announcements can be suspended');
+    }
+    
+    // Mark as read for all users to effectively "suspend" it
+    await db.Notification.update(
+        { isRead: true },
+        { 
+            where: { 
+                type: 'system_announcement',
+                title: announcement.title,
+                message: announcement.message,
+                createdAt: announcement.createdAt
+            }
+        }
+    );
+    
+    return { message: 'Announcement suspended successfully' };
 }
 
 

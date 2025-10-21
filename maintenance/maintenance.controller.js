@@ -84,8 +84,28 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
   try {
     const { tenantId } = req.params;
     
-    // Check if user is requesting their own requests or is admin
-    if (req.user.role !== 'Admin' && req.user.role !== 'admin' && req.user.id !== parseInt(tenantId)) {
+    // Check if user is admin or superadmin
+    if (req.user.role === 'Admin' || req.user.role === 'admin' || req.user.role === 'SuperAdmin' || req.user.role === 'superadmin') {
+      // Admin/SuperAdmin can access any tenant's maintenance requests
+      const requests = await db.Maintenance.findAll({
+        where: { tenantId: parseInt(tenantId) },
+        order: [['createdAt', 'DESC']],
+        include: [
+          { model: db.Room, attributes: ['roomNumber', 'building'] },
+          { model: db.Tenant, attributes: ['firstName', 'lastName'] }
+        ]
+      });
+      return res.json(requests);
+    }
+    
+    // For tenants, check if they have a tenant record linked to their account
+    const tenant = await db.Tenant.findOne({ where: { accountId: req.user.id } });
+    if (!tenant) {
+      return res.status(403).json({ message: 'No tenant record found for this account' });
+    }
+    
+    // Check if the tenant is requesting their own requests
+    if (tenant.id !== parseInt(tenantId)) {
       return res.status(403).json({ message: 'Forbidden' });
     }
     
