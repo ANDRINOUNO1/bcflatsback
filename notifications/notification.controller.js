@@ -24,8 +24,16 @@ router.post('/:id/read', ...authorize(), async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-// Broadcast system announcement (SuperAdmin only)
-router.post('/broadcast', ...authorize(Role.SuperAdmin), async (req, res, next) => {
+// Mark all notifications as read
+router.post('/mark-all-read', ...authorize(), async (req, res, next) => {
+    try {
+        const result = await service.markAllAsRead(req.user.id);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
+// Broadcast system announcement (Admin and SuperAdmin)
+router.post('/broadcast', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
     try {
         const { title, message, roles } = req.body;
         

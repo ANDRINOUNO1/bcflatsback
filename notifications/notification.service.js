@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 module.exports = {
     createNotification,
     markAsRead,
+    markAllAsRead,
     getNotifications,
     broadcastToRoles,
     hasRecentNotification,
@@ -47,6 +48,34 @@ async function markAsRead(notificationId, accountId) {
     return notification;
 }
 
+async function markAllAsRead(accountId) {
+    if (!accountId) throw new Error('Account ID is required');
+    
+    // Get user's role from account
+    const account = await db.Account.findByPk(accountId);
+    if (!account) throw new Error('Account not found');
+    
+    // Mark all unread notifications as read for this user's role and account
+    const [updatedCount] = await db.Notification.update(
+        { isRead: true },
+        {
+            where: {
+                recipientRole: account.role,
+                isRead: false,
+                [Op.or]: [
+                    { recipientAccountId: { [Op.is]: null } },
+                    { recipientAccountId: accountId }
+                ]
+            }
+        }
+    );
+    
+    return { 
+        message: 'All notifications marked as read',
+        updatedCount 
+    };
+}
+
 async function getNotifications({ role, accountId = null, limit = 30 }) {
     if (!role) throw new Error('role is required');
     // Return both role-level (recipientAccountId IS NULL) and account-specific notifications
@@ -81,7 +110,7 @@ async function hasRecentNotification({ tenantId, type, days = 3 }) {
 async function getAllAnnouncements({ limit = 50, offset = 0 } = {}) {
     const announcements = await db.Notification.findAll({
         where: {
-            type: 'system_announcement'
+            type: 'SYSTEM'
         },
         order: [['createdAt', 'DESC']],
         limit: parseInt(limit),
@@ -96,7 +125,7 @@ async function deleteAnnouncement(announcementId) {
     if (!announcement) {
         throw new Error('Announcement not found');
     }
-    if (announcement.type !== 'system_announcement') {
+    if (announcement.type !== 'SYSTEM') {
         throw new Error('Only system announcements can be deleted');
     }
     await announcement.destroy();
@@ -108,7 +137,7 @@ async function suspendAnnouncement(announcementId) {
     if (!announcement) {
         throw new Error('Announcement not found');
     }
-    if (announcement.type !== 'system_announcement') {
+    if (announcement.type !== 'SYSTEM') {
         throw new Error('Only system announcements can be suspended');
     }
     
@@ -117,7 +146,7 @@ async function suspendAnnouncement(announcementId) {
         { isRead: true },
         { 
             where: { 
-                type: 'system_announcement',
+                type: 'SYSTEM',
                 title: announcement.title,
                 message: announcement.message,
                 createdAt: announcement.createdAt
