@@ -24,8 +24,16 @@ router.post('/:id/read', ...authorize(), async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-// Broadcast system announcement (SuperAdmin only)
-router.post('/broadcast', ...authorize(Role.SuperAdmin), async (req, res, next) => {
+// Mark all notifications as read
+router.post('/mark-all-read', ...authorize(), async (req, res, next) => {
+    try {
+        const result = await service.markAllAsRead(req.user.id);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
+// Broadcast system announcement (HeadAdmin, Admin and SuperAdmin)
+router.post('/broadcast', ...authorize([Role.HeadAdmin, Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
     try {
         const { title, message, roles } = req.body;
         
@@ -33,15 +41,15 @@ router.post('/broadcast', ...authorize(Role.SuperAdmin), async (req, res, next) 
             return res.status(400).json({ message: 'Title and message are required' });
         }
         
-        const targetRoles = roles || ['Admin', 'SuperAdmin', 'Accounting', 'Tenant'];
+        const targetRoles = roles || ['HeadAdmin', 'Admin', 'SuperAdmin', 'Accounting', 'Tenant'];
         await notificationHelper.notifySystemAnnouncement(title, message, targetRoles);
         
         res.json({ message: 'Announcement broadcasted successfully', title, targetRoles });
     } catch (err) { next(err); }
 });
 
-// Get all announcements (Admin and SuperAdmin only)
-router.get('/announcements', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+// Get all announcements (HeadAdmin, Admin and SuperAdmin only)
+router.get('/announcements', ...authorize([Role.HeadAdmin, Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
     try {
         const { limit = 50, offset = 0 } = req.query;
         const announcements = await service.getAllAnnouncements({ limit, offset });
@@ -49,16 +57,16 @@ router.get('/announcements', ...authorize([Role.Admin, Role.SuperAdmin]), async 
     } catch (err) { next(err); }
 });
 
-// Delete announcement (Admin and SuperAdmin only)
-router.delete('/announcements/:id', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+// Delete announcement (HeadAdmin, Admin and SuperAdmin only)
+router.delete('/announcements/:id', ...authorize([Role.HeadAdmin, Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
     try {
         const result = await service.deleteAnnouncement(req.params.id);
         res.json(result);
     } catch (err) { next(err); }
 });
 
-// Suspend announcement (Admin and SuperAdmin only)
-router.post('/announcements/:id/suspend', ...authorize([Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
+// Suspend announcement (HeadAdmin, Admin and SuperAdmin only)
+router.post('/announcements/:id/suspend', ...authorize([Role.HeadAdmin, Role.Admin, Role.SuperAdmin]), async (req, res, next) => {
     try {
         const result = await service.suspendAnnouncement(req.params.id);
         res.json(result);

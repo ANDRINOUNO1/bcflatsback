@@ -4,7 +4,7 @@ module.exports = (sequelize) => {
     const Notification = sequelize.define('Notification', {
         id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
         recipientRole: { 
-            type: DataTypes.ENUM('Tenant', 'Accounting', 'Admin', 'SuperAdmin'), 
+            type: DataTypes.ENUM('Tenant', 'Accounting', 'Admin', 'SuperAdmin', 'HeadAdmin'), 
             allowNull: false 
         },
         recipientAccountId: { 

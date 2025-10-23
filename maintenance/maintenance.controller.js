@@ -53,11 +53,12 @@ router.post('/', authorize(), async (req, res, next) => {
   }
 });
 
-// List all (admin)
+// List all (admin, superadmin, headadmin)
 router.get('/', authorize(), async (req, res, next) => {
   try {
-    // Only admins should see all; simple role check
-    if (req.user.role !== 'Admin' && req.user.role !== 'admin') {
+    // Allow Admin, SuperAdmin, and HeadAdmin to see all maintenance requests
+    const allowedRoles = ['Admin', 'admin', 'SuperAdmin', 'superadmin', 'HeadAdmin', 'headadmin'];
+    if (!allowedRoles.includes(req.user.role)) {
       // tenants: only own
       const list = await db.Maintenance.findAll({ where: { tenantId: req.user.id }, order: [['createdAt','DESC']] });
       return res.json(list);
@@ -67,10 +68,11 @@ router.get('/', authorize(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Update status (admin)
+// Update status (admin, superadmin, headadmin)
 router.patch('/:id/status', authorize(), async (req, res, next) => {
   try {
-    if (req.user.role !== 'Admin' && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    const allowedRoles = ['Admin', 'admin', 'SuperAdmin', 'superadmin', 'HeadAdmin', 'headadmin'];
+    if (!allowedRoles.includes(req.user.role)) return res.status(403).json({ message: 'Forbidden' });
     const item = await db.Maintenance.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: 'Not found' });
     item.status = req.body.status || item.status;
@@ -84,9 +86,10 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
   try {
     const { tenantId } = req.params;
     
-    // Check if user is admin or superadmin
-    if (req.user.role === 'Admin' || req.user.role === 'admin' || req.user.role === 'SuperAdmin' || req.user.role === 'superadmin') {
-      // Admin/SuperAdmin can access any tenant's maintenance requests
+    // Check if user is admin, superadmin, or headadmin
+    const allowedRoles = ['Admin', 'admin', 'SuperAdmin', 'superadmin', 'HeadAdmin', 'headadmin'];
+    if (allowedRoles.includes(req.user.role)) {
+      // Admin/SuperAdmin/HeadAdmin can access any tenant's maintenance requests
       const requests = await db.Maintenance.findAll({
         where: { tenantId: parseInt(tenantId) },
         order: [['createdAt', 'DESC']],
@@ -122,10 +125,12 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Get maintenance statistics (admin only)
+// Get maintenance statistics (admin, superadmin, headadmin only)
 router.get('/stats', authorize(), async (req, res, next) => {
   try {
-    if (req.user.role !== 'Admin' && req.user.role !== 'admin') {
+    // Allow Admin, SuperAdmin, and HeadAdmin to access stats
+    const allowedRoles = ['Admin', 'admin', 'SuperAdmin', 'superadmin', 'HeadAdmin', 'headadmin'];
+    if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ message: 'Forbidden' });
     }
     

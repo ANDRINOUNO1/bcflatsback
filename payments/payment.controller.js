@@ -18,6 +18,8 @@ router.post('/pending/:tenantId', ...authorize(['Tenant']), createPendingPayment
 router.post('/confirm/:paymentId', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), confirmPayment);
 router.get('/pending', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), getPendingPayments);
 router.get('/id/:id', ...authorize(), getPaymentById);
+router.get('/overdue', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), getOverdueTenants);
+router.post('/check-overdue', ...authorize(['Admin', 'SuperAdmin', 'Accounting']), checkOverduePayments);
 router.get('/:tenantId', ...authorize(), getPaymentsByTenant);
 
 module.exports = router;
@@ -163,6 +165,27 @@ async function getPendingPayments(req, res, next) {
     try {
         const payments = await paymentService.getPendingPayments();
         res.json(payments);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getOverdueTenants(req, res, next) {
+    try {
+        const overdueTenants = await paymentService.getOverdueTenants();
+        res.json(overdueTenants);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function checkOverduePayments(req, res, next) {
+    try {
+        const result = await paymentService.checkAndNotifyOverduePayments();
+        res.json({
+            message: 'Overdue payment check completed',
+            ...result
+        });
     } catch (error) {
         next(error);
     }

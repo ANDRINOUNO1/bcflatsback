@@ -15,7 +15,9 @@ module.exports = {
     createPendingPayment,
     confirmPayment,
     getPendingPayments,
-    getPaymentById
+    getPaymentById,
+    checkAndNotifyOverduePayments,
+    getOverdueTenants
 };
 
 async function recordPayment(paymentData) {
@@ -630,5 +632,206 @@ async function getPendingPayments() {
         }));
     } catch (error) {
         throw new Error(`Failed to get pending payments: ${error.message}`);
+    }
+}
+
+// Check for overdue payments and send notifications to tenants
+async function checkAndNotifyOverduePayments() {
+    try {
+        console.log('🔍 Checking for overdue payments...');
+        
+        // Ensure accruals are up to date
+        await accrueMonthlyChargesIfNeeded();
+        
+        // Get all active tenants with outstanding balances
+        const tenants = await db.Tenant.findAll({
+            where: { 
+                status: 'Active',
+                outstandingBalance: { [Op.gt]: 0 }
+            },
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building']
+                }
+            ]
+        });
+
+        const today = new Date();
+        const overdueNotifications = [];
+
+        for (const tenant of tenants) {
+            const outstandingBalance = tenant.getOutstandingBalance();
+            const nextDueDate = tenant.nextDueDate || tenant.calculateNextDueDate();
+            const daysOverdue = Math.floor((today - nextDueDate) / (1000 * 60 * 60 * 24));
+
+            // Only notify if payment is overdue (past due date) and has outstanding balance
+            if (daysOverdue > 0 && outstandingBalance > 0) {
+                // Check if we already sent a notification for this tenant in the last 3 days
+                const hasRecentNotification = await notifications.hasRecentNotification({
+                    tenantId: tenant.id,
+                    type: 'payment_overdue',
+                    days: 3
+                });
+
+                if (!hasRecentNotification) {
+                    // Determine notification severity based on days overdue
+                    let severity = 'warning';
+                    let urgencyMessage = '';
+                    
+                    if (daysOverdue >= 30) {
+                        severity = 'critical';
+                        urgencyMessage = 'URGENT: Your payment is over 30 days overdue. Please contact management immediately.';
+                    } else if (daysOverdue >= 14) {
+                        severity = 'high';
+                        urgencyMessage = 'Your payment is over 2 weeks overdue. Please make payment as soon as possible.';
+                    } else if (daysOverdue >= 7) {
+                        severity = 'medium';
+                        urgencyMessage = 'Your payment is over 1 week overdue. Please arrange payment.';
+                    } else {
+                        urgencyMessage = 'Your payment is overdue. Please make payment to avoid additional charges.';
+                    }
+
+                    const notificationTitle = `Payment Overdue - ${daysOverdue} day${daysOverdue > 1 ? 's' : ''}`;
+                    const notificationMessage = `Dear ${tenant.account.firstName},\n\n${urgencyMessage}\n\nOutstanding Balance: ₱${outstandingBalance.toFixed(2)}\nDue Date: ${nextDueDate.toLocaleDateString()}\nRoom: ${tenant.room.roomNumber}\n\nPlease contact the management office to arrange payment.\n\nThank you for your attention to this matter.`;
+
+                    try {
+                        // Send notification to tenant
+                        await notifications.createNotification({
+                            recipientRole: 'Tenant',
+                            recipientAccountId: tenant.account.id,
+                            tenantId: tenant.id,
+                            type: 'payment_overdue',
+                            title: notificationTitle,
+                            message: notificationMessage,
+                            metadata: {
+                                severity,
+                                daysOverdue,
+                                outstandingBalance,
+                                nextDueDate: nextDueDate.toISOString(),
+                                roomNumber: tenant.room.roomNumber
+                            }
+                        });
+
+                        // Also notify accounting and admin staff
+                        await notifications.broadcastToRoles({
+                            roles: ['Accounting', 'Admin', 'SuperAdmin'],
+                            tenantId: tenant.id,
+                            type: 'payment_overdue',
+                            title: `Tenant Payment Overdue - ${tenant.account.firstName} ${tenant.account.lastName}`,
+                            message: `Tenant ${tenant.account.firstName} ${tenant.account.lastName} (Room ${tenant.room.roomNumber}) has an overdue payment.\n\nDays Overdue: ${daysOverdue}\nOutstanding Balance: ₱${outstandingBalance.toFixed(2)}\nDue Date: ${nextDueDate.toLocaleDateString()}\nSeverity: ${severity.toUpperCase()}`,
+                            metadata: {
+                                severity,
+                                daysOverdue,
+                                outstandingBalance,
+                                nextDueDate: nextDueDate.toISOString(),
+                                tenantName: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                                roomNumber: tenant.room.roomNumber,
+                                tenantEmail: tenant.account.email
+                            }
+                        });
+
+                        overdueNotifications.push({
+                            tenantId: tenant.id,
+                            tenantName: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                            roomNumber: tenant.room.roomNumber,
+                            daysOverdue,
+                            outstandingBalance,
+                            severity,
+                            nextDueDate
+                        });
+
+                        console.log(`📧 Overdue notification sent to tenant ${tenant.id} (${tenant.account.firstName} ${tenant.account.lastName}) - ${daysOverdue} days overdue`);
+                    } catch (error) {
+                        console.error(`❌ Failed to send overdue notification to tenant ${tenant.id}:`, error.message);
+                    }
+                } else {
+                    console.log(`⏭️ Skipping notification for tenant ${tenant.id} - recent notification already sent`);
+                }
+            }
+        }
+
+        console.log(`✅ Overdue payment check completed. Notifications sent: ${overdueNotifications.length}`);
+        return {
+            checked: tenants.length,
+            overdue: overdueNotifications.length,
+            notifications: overdueNotifications
+        };
+    } catch (error) {
+        console.error('❌ Failed to check overdue payments:', error.message);
+        throw new Error(`Failed to check overdue payments: ${error.message}`);
+    }
+}
+
+// Get list of tenants with overdue payments
+async function getOverdueTenants() {
+    try {
+        // Ensure accruals are up to date
+        await accrueMonthlyChargesIfNeeded();
+        
+        const tenants = await db.Tenant.findAll({
+            where: { 
+                status: 'Active',
+                outstandingBalance: { [Op.gt]: 0 }
+            },
+            include: [
+                {
+                    model: db.Account,
+                    as: 'account',
+                    attributes: ['id', 'firstName', 'lastName', 'email']
+                },
+                {
+                    model: db.Room,
+                    as: 'room',
+                    attributes: ['id', 'roomNumber', 'floor', 'building']
+                }
+            ]
+        });
+
+        const today = new Date();
+        const overdueTenants = [];
+
+        for (const tenant of tenants) {
+            const outstandingBalance = tenant.getOutstandingBalance();
+            const nextDueDate = tenant.nextDueDate || tenant.calculateNextDueDate();
+            const daysOverdue = Math.floor((today - nextDueDate) / (1000 * 60 * 60 * 24));
+
+            if (daysOverdue > 0 && outstandingBalance > 0) {
+                // Determine severity
+                let severity = 'warning';
+                if (daysOverdue >= 30) severity = 'critical';
+                else if (daysOverdue >= 14) severity = 'high';
+                else if (daysOverdue >= 7) severity = 'medium';
+
+                overdueTenants.push({
+                    id: tenant.id,
+                    name: `${tenant.account.firstName} ${tenant.account.lastName}`,
+                    email: tenant.account.email,
+                    roomNumber: tenant.room.roomNumber,
+                    floor: tenant.room.floor,
+                    building: tenant.room.building,
+                    outstandingBalance,
+                    nextDueDate,
+                    daysOverdue,
+                    severity,
+                    monthlyRent: parseFloat(tenant.monthlyRent),
+                    utilities: parseFloat(tenant.utilities),
+                    lastPaymentDate: tenant.lastPaymentDate
+                });
+            }
+        }
+
+        // Sort by days overdue (most overdue first)
+        overdueTenants.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+        return overdueTenants;
+    } catch (error) {
+        throw new Error(`Failed to get overdue tenants: ${error.message}`);
     }
 }

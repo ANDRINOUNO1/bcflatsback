@@ -378,12 +378,15 @@ async function notifyDepositApplied(tenant, amount, reason) {
 // ==================== SYSTEM NOTIFICATIONS ====================
 
 async function notifySystemAnnouncement(title, message, roles = ['Admin', 'SuperAdmin', 'Accounting', 'Tenant']) {
+    // Generate a unique announcement ID to group related notifications
+    const announcementId = `announcement_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     await notifyRoles(
         roles,
         NotificationTypes.SYSTEM,
         title,
         message,
-        {}
+        { announcementId, isAnnouncement: true }
     );
 }
 

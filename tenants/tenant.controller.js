@@ -24,9 +24,9 @@ router.get('/search/account/:accountId', ...authorize(), getTenantsByAccount);
 router.get('/search/room/:roomId', ...authorize(), getTenantsByRoom);
 router.get('/:id/billing-info', ...authorize(), getTenantBillingInfo);
 
-// Archived tenants routes
-router.get('/archived/list', ...authorize(['Admin', 'SuperAdmin']), getArchivedTenants);
-router.get('/archived/:id', ...authorize(['Admin', 'SuperAdmin']), getArchivedTenantById);
+// Archived tenants routes - now using archive service
+router.get('/archived/list', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getArchivedTenantsFromArchive);
+router.get('/archived/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getArchivedTenantById);
 
 module.exports = router;
 
@@ -115,11 +115,17 @@ async function checkInTenant(req, res, next) {
 
 async function checkOutTenant(req, res, next) {
     try {
-        const tenant = await tenantService.checkOutTenant(req.params.id);
-        if (!tenant) {
+        const { archiveReason } = req.body;
+        const checkoutData = {
+            archiveReason: archiveReason || 'Lease ended',
+            archivedBy: req.user.id
+        };
+        
+        const result = await tenantService.checkOutTenant(req.params.id, checkoutData);
+        if (!result) {
             return res.status(404).json({ message: 'Tenant not found' });
         }
-        res.json(tenant);
+        res.json(result);
     } catch (error) {
         next(error);
     }
@@ -168,19 +174,21 @@ async function getTenantBillingInfo(req, res, next) {
     }
 }
 
-async function getArchivedTenants(req, res, next) {
+async function getArchivedTenantsFromArchive(req, res, next) {
     try {
-        const { search, dateFrom, dateTo, floor, sortBy, sortOrder } = req.query;
-        const filters = {
-            search,
-            dateFrom,
-            dateTo,
-            floor,
-            sortBy,
-            sortOrder
+        const archiveService = require('../archives/archive.service');
+        const options = {
+            page: req.query.page || 1,
+            limit: req.query.limit || 50,
+            sortBy: req.query.sortBy || 'checkOutDate',
+            sortOrder: req.query.sortOrder || 'DESC',
+            search: req.query.search || '',
+            startDate: req.query.startDate || null,
+            endDate: req.query.endDate || null
         };
-        const archivedTenants = await tenantService.getArchivedTenants(filters);
-        res.json(archivedTenants);
+        
+        const result = await archiveService.getArchivedTenants(options);
+        res.json(result);
     } catch (error) {
         next(error);
     }

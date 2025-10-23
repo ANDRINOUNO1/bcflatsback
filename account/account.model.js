@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
         passwordHash: { type: DataTypes.STRING, allowNull: false },
         status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'Pending' },
         role: { 
-            type: DataTypes.ENUM('Admin', 'SuperAdmin', 'Tenant', 'Accounting'), 
+            type: DataTypes.ENUM('HeadAdmin', 'Admin', 'SuperAdmin', 'Tenant', 'Accounting'), 
             allowNull: false, 
             defaultValue: 'Tenant' 
         },
@@ -33,6 +33,15 @@ module.exports = (sequelize, DataTypes) => {
     
     Account.seedDefaults = async function() {
         const defaults = [
+            {
+                title: 'headadmin',
+                firstName: 'Head',
+                lastName: 'Admin',
+                email: 'headadmin@example.com',
+                status: 'Active',
+                role: 'HeadAdmin',
+                password: 'headadmin123'
+            },
             {
                 title: 'admin',
                 firstName: 'Admin',
