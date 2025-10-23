@@ -25,6 +25,8 @@ app.use('/api/tenants', require('./tenants/tenant.controller'));
 app.use('/api/maintenance', require('./maintenance/maintenance.controller'));
 app.use('/api/payments', require('./payments/payment.controller'));
 app.use('/api/notifications', require('./notifications/notification.controller'));
+app.use('/api/archives', require('./archives/archive.controller'));
+app.use('/api/announcements', require('./announcements/announcement.controller'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -63,16 +65,20 @@ app.get('/api/debug/accounts', async (req, res) => {
 });
 
 
-app.get('/api/test-auth', ...authorize(), (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Authentication successful',
-    user: {
-      id: req.user.id,
-      role: req.user.role,
-      status: req.user.status
-    }
-  });
+app.get('/api/test-auth', ...authorize(), async (req, res) => {
+  try {
+    const accountService = require('./account/account.service');
+    const userDetails = await accountService.basicDetails(req.user);
+    
+    res.json({ 
+      status: 'OK', 
+      message: 'Authentication successful',
+      user: userDetails
+    });
+  } catch (error) {
+    console.error('❌ Error in test-auth:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Global error handler

@@ -3,6 +3,7 @@ const Role = {
     Tenant: 'Tenant',
     Accounting: 'Accounting',
     SuperAdmin: 'SuperAdmin',
+    HeadAdmin: 'HeadAdmin',
     Owner: 'Owner'
 };
 

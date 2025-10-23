@@ -1,22 +1,35 @@
 const express = require('express');
 const router = express.Router();
 const accountService = require('./account.service');
+const navigationControlController = require('./navigation-control.controller');
 const authorize = require('../_middleware/authorize');
+const { requireHeadAdmin } = require('./headadmin.middleware');
 
 // routes
 router.post('/authenticate', authenticate);
 router.post('/register', register);
-router.post('/', ...authorize(['Admin', 'SuperAdmin']), createAccount);
-router.get('/', ...authorize(['Admin', 'SuperAdmin']), getAll);
+router.post('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), createAccount);
+router.get('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getAll);
 // SuperAdmin: pending list and account management
-router.get('/pending', ...authorize(['SuperAdmin']), getPending);
-router.patch('/:id/approve', ...authorize(['SuperAdmin']), approveAccount);
-router.patch('/:id/reject', ...authorize(['SuperAdmin']), rejectAccount);
-router.patch('/:id/role', ...authorize(['SuperAdmin']), setRole);
-router.patch('/:id/status', ...authorize(['SuperAdmin']), setStatus);
-router.get('/:id', ...authorize(['Admin', 'SuperAdmin']), getById);
-router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), update);
-router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), _delete);
+router.get('/pending', ...authorize(['SuperAdmin', 'HeadAdmin']), getPending);
+router.patch('/:id/approve', ...authorize(['SuperAdmin', 'HeadAdmin']), approveAccount);
+router.patch('/:id/reject', ...authorize(['SuperAdmin', 'HeadAdmin']), rejectAccount);
+router.patch('/:id/role', ...authorize(['SuperAdmin', 'HeadAdmin']), setRole);
+router.patch('/:id/status', ...authorize(['SuperAdmin', 'HeadAdmin']), setStatus);
+router.get('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getById);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), update);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), _delete);
+
+// Simplified Navigation Control routes (Head Admin only)
+router.get('/navigation-control/admins', ...requireHeadAdmin(), navigationControlController.getAllAdmins);
+router.post('/navigation-control/admins', ...requireHeadAdmin(), navigationControlController.createAdmin);
+router.put('/navigation-control/admins/:adminId/navigation', ...requireHeadAdmin(), navigationControlController.updateAdminNavigationPermissions);
+router.patch('/navigation-control/admins/:adminId/deactivate', ...requireHeadAdmin(), navigationControlController.deactivateAdmin);
+router.delete('/navigation-control/admins/:adminId', ...requireHeadAdmin(), navigationControlController.deleteAdmin);
+
+// Navigation permission management
+router.get('/navigation-control/permissions', ...requireHeadAdmin(), navigationControlController.getNavigationPermissions);
+router.put('/navigation-control/admins/:adminId/access', ...requireHeadAdmin(), navigationControlController.updateNavigationAccess);
 
 module.exports = router;
 

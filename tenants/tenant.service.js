@@ -324,9 +324,11 @@ async function checkInTenant(id) {
     }
 }
 
-// Check out tenant
-async function checkOutTenant(id) {
+// Check out tenant and transfer to archive
+async function checkOutTenant(id, checkoutData = {}) {
     try {
+        const { archiveReason = 'Lease ended', archivedBy } = checkoutData;
+        
         const tenant = await db.Tenant.findByPk(id, {
             include: [
                 {
@@ -341,14 +343,18 @@ async function checkOutTenant(id) {
                 }
             ]
         });
-        if (!tenant) return null;
+        
+        if (!tenant) {
+            throw new Error('Tenant not found');
+        }
 
         if (tenant.status !== 'Active') {
             throw new Error('Tenant is not currently checked in');
         }
 
-        // Check out tenant (sets status to "Checked Out")
-        await tenant.checkOut();
+        // Use archive service to properly archive the tenant
+        const archiveService = require('../archives/archive.service');
+        const archive = await archiveService.archiveTenant(id, archivedBy, archiveReason);
 
         // Suspend the associated account
         const account = await db.Account.findByPk(tenant.accountId);
@@ -366,14 +372,24 @@ async function checkOutTenant(id) {
 
         // Create archive notification for Admin and SuperAdmin
         const notificationService = require('../notifications/notification.service');
-        await notificationService.createNotificationByRole(
-            ['Admin', 'SuperAdmin'],
-            'Tenant Checked Out - Archived',
-            `${tenant.account.firstName} ${tenant.account.lastName} from Room ${tenant.room.roomNumber} has been checked out and archived. Account suspended. Outstanding balance: ₱${tenant.getOutstandingBalance().toFixed(2)}`,
-            'tenant'
-        );
+        await notificationService.broadcastToRoles({
+            roles: ['Admin', 'SuperAdmin', 'HeadAdmin'],
+            tenantId: tenant.id,
+            type: 'tenant_archived',
+            title: 'Tenant Checked Out - Archived',
+            message: `${tenant.account.firstName} ${tenant.account.lastName} from Room ${tenant.room.roomNumber} has been checked out and archived. Account suspended. Outstanding balance: ₱${tenant.getOutstandingBalance().toFixed(2)}`,
+            metadata: {
+                archiveId: archive.id,
+                archiveReason,
+                finalBalance: tenant.getOutstandingBalance()
+            }
+        });
 
-        return await getTenantById(id);
+        return {
+            message: 'Tenant successfully checked out and archived',
+            archive: archive,
+            tenant: await getTenantById(id)
+        };
     } catch (error) {
         throw new Error(`Failed to check out tenant: ${error.message}`);
     }

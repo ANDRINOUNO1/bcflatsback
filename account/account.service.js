@@ -6,23 +6,6 @@ const { Op } = require('sequelize');
 const db = require('../_helpers/db');
 const notificationHelper = require('../notifications/notification.helper');
 
-module.exports = {
-    authenticate,
-    refreshToken,
-    revokeToken,
-    getAll,
-    getById,
-    create,
-    update,
-    delete: _delete,
-    // SuperAdmin management
-    getPending,
-    approveAccount,
-    rejectAccount,
-    setRole,
-    setStatus
-};
-
 // ================= AUTH =================
 
 async function authenticate({ email, password, ipAddress }) {
@@ -61,8 +44,9 @@ async function authenticate({ email, password, ipAddress }) {
     const refreshToken = await generateRefreshToken(account, ipAddress);
 
     // return basic details and tokens
+    const basicAccountDetails = await basicDetails(account);
     return {
-        ...basicDetails(account),
+        ...basicAccountDetails,
         jwtToken,
         refreshToken: refreshToken.token
     };
@@ -83,8 +67,9 @@ async function refreshToken({ token, ipAddress }) {
     const jwtToken = generateJwtToken(account);
 
     // return basic details and tokens
+    const basicAccountDetails = await basicDetails(account);
     return {
-        ...basicDetails(account),
+        ...basicAccountDetails,
         jwtToken,
         refreshToken: newRefreshToken.token
     };
@@ -206,7 +191,7 @@ async function rejectAccount(id, reason) {
 }
 
 async function setRole(id, role) {
-    const allowedRoles = ['Admin', 'SuperAdmin', 'Tenant', 'Accounting'];
+    const allowedRoles = ['HeadAdmin', 'Admin', 'SuperAdmin', 'Tenant', 'Accounting'];
     if (!allowedRoles.includes(role)) {
         throw 'Invalid role';
     }
@@ -268,7 +253,173 @@ async function getAccount(id) {
     return account;
 }
 
-function basicDetails(account) {
-    const { id, role, status } = account;
-    return { id, role, status };
+async function basicDetails(account) {
+    const { id, role, status, firstName, lastName, email } = account;
+    
+    // For now, use the account's role field directly and create a simple roles array
+    // This avoids the association issues while still providing the necessary data
+    const roles = role ? [{ 
+        id: 0, 
+        name: role, 
+        level: getRoleLevel(role) 
+    }] : [];
+    
+    // Get basic permissions based on role
+    let permissions = getRolePermissions(role);
+    
+    // Check for custom navigation permissions (for Admin role)
+    if (role === 'Admin') {
+        try {
+            const navigationPermission = await db.NavigationPermission.findOne({
+                where: { accountId: id }
+            });
+            
+            if (navigationPermission && navigationPermission.permissions) {
+                const customPermissions = JSON.parse(navigationPermission.permissions);
+                // Convert custom permission IDs to permission objects
+                permissions = customPermissions.map(permId => {
+                    const navPerm = getRolePermissions('Admin').find(p => p.id === permId);
+                    return navPerm || { id: permId, name: `nav.${permId}`, resource: 'navigation', action: permId };
+                });
+            }
+        } catch (error) {
+            console.log('Error loading custom navigation permissions:', error.message);
+        }
+    }
+    
+    return { 
+        id, 
+        role, 
+        status, 
+        firstName, 
+        lastName, 
+        email,
+        roles: roles,
+        permissions: permissions
+    };
 }
+
+// Helper function to get role level
+function getRoleLevel(roleName) {
+    const roleLevels = {
+        'HeadAdmin': 100,
+        'SuperAdmin': 90,
+        'Admin': 50,
+        'Accounting': 30,
+        'Tenant': 10
+    };
+    return roleLevels[roleName] || 0;
+}
+
+// Helper function to get role permissions
+function getRolePermissions(roleName) {
+    const rolePermissions = {
+        'HeadAdmin': [
+            { id: 1, name: 'manage_users', resource: 'user_management', action: 'manage' },
+            { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
+            { id: 3, name: 'manage_rooms', resource: 'rooms', action: 'manage' },
+            { id: 4, name: 'view_rooms', resource: 'rooms', action: 'read' },
+            { id: 5, name: 'manage_tenants', resource: 'tenants', action: 'manage' },
+            { id: 6, name: 'view_tenants', resource: 'tenants', action: 'read' },
+            { id: 7, name: 'manage_payments', resource: 'payments', action: 'manage' },
+            { id: 8, name: 'view_payments', resource: 'payments', action: 'read' },
+            { id: 9, name: 'manage_maintenance', resource: 'maintenance', action: 'manage' },
+            { id: 10, name: 'view_maintenance', resource: 'maintenance', action: 'read' },
+            { id: 11, name: 'manage_announcements', resource: 'announcements', action: 'manage' },
+            { id: 12, name: 'view_announcements', resource: 'announcements', action: 'read' },
+            { id: 13, name: 'view_archives', resource: 'archives', action: 'read' },
+            { id: 14, name: 'manage_roles', resource: 'roles', action: 'manage' },
+            { id: 15, name: 'manage_permissions', resource: 'permissions', action: 'manage' },
+            { id: 16, name: 'view_accounting', resource: 'accounting', action: 'read' },
+            { id: 17, name: 'manage_admins', resource: 'admin_management', action: 'manage' },
+            // Navigation permissions
+            { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
+            { id: 19, name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
+            { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
+            { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' },
+            { id: 22, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
+            { id: 23, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
+            { id: 24, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
+            { id: 25, name: 'nav.archives', resource: 'navigation', action: 'archives' },
+            { id: 26, name: 'nav.add_account', resource: 'navigation', action: 'add_account' }
+        ],
+        'SuperAdmin': [
+            { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
+            { id: 3, name: 'manage_rooms', resource: 'rooms', action: 'manage' },
+            { id: 4, name: 'view_rooms', resource: 'rooms', action: 'read' },
+            { id: 5, name: 'manage_tenants', resource: 'tenants', action: 'manage' },
+            { id: 6, name: 'view_tenants', resource: 'tenants', action: 'read' },
+            { id: 7, name: 'manage_payments', resource: 'payments', action: 'manage' },
+            { id: 8, name: 'view_payments', resource: 'payments', action: 'read' },
+            { id: 9, name: 'manage_maintenance', resource: 'maintenance', action: 'manage' },
+            { id: 10, name: 'view_maintenance', resource: 'maintenance', action: 'read' },
+            { id: 11, name: 'manage_announcements', resource: 'announcements', action: 'manage' },
+            { id: 12, name: 'view_announcements', resource: 'announcements', action: 'read' },
+            { id: 13, name: 'view_archives', resource: 'archives', action: 'read' },
+            { id: 16, name: 'view_accounting', resource: 'accounting', action: 'read' },
+            // Navigation permissions
+            { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
+            { id: 19, name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
+            { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
+            { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' },
+            { id: 22, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
+            { id: 23, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
+            { id: 24, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
+            { id: 25, name: 'nav.archives', resource: 'navigation', action: 'archives' },
+            { id: 26, name: 'nav.add_account', resource: 'navigation', action: 'add_account' }
+        ],
+        'Admin': [
+            { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
+            { id: 4, name: 'view_rooms', resource: 'rooms', action: 'read' },
+            { id: 6, name: 'view_tenants', resource: 'tenants', action: 'read' },
+            { id: 10, name: 'view_maintenance', resource: 'maintenance', action: 'read' },
+            { id: 12, name: 'view_announcements', resource: 'announcements', action: 'read' },
+            { id: 13, name: 'view_archives', resource: 'archives', action: 'read' },
+            // Navigation permissions - Admin has limited navigation by default
+            { id: 'dashboard', name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
+            { id: 'rooms', name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
+            { id: 'tenants', name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
+            { id: 'maintenance', name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
+            { id: 'announcements', name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
+            { id: 'archives', name: 'nav.archives', resource: 'navigation', action: 'archives' }
+        ],
+        'Accounting': [
+            { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
+            { id: 6, name: 'view_tenants', resource: 'tenants', action: 'read' },
+            { id: 7, name: 'manage_payments', resource: 'payments', action: 'manage' },
+            { id: 8, name: 'view_payments', resource: 'payments', action: 'read' },
+            { id: 16, name: 'view_accounting', resource: 'accounting', action: 'read' },
+            // Navigation permissions
+            { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
+            { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
+            { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' }
+        ],
+        'Tenant': [
+            { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
+            { id: 10, name: 'view_maintenance', resource: 'maintenance', action: 'read' },
+            { id: 8, name: 'view_payments', resource: 'payments', action: 'read' },
+            // Navigation permissions
+            { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
+            { id: 23, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' }
+        ]
+    };
+    
+    return rolePermissions[roleName] || [];
+}
+
+module.exports = {
+    authenticate,
+    refreshToken,
+    revokeToken,
+    getAll,
+    getById,
+    create,
+    update,
+    delete: _delete,
+    getPending,
+    approveAccount,
+    rejectAccount,
+    setRole,
+    setStatus,
+    basicDetails
+};
