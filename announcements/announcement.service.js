@@ -1,5 +1,6 @@
 const db = require('../_helpers/db');
 const { Op } = require('sequelize');
+const { literal } = require('sequelize');
 
 module.exports = {
     createAnnouncement,
@@ -82,9 +83,9 @@ async function getAnnouncements(options = {}) {
 
         // Add role filter
         if (role) {
-            where.targetRoles = {
-                [Op.contains]: [role]
-            };
+            where[Op.and] = [
+                literal(`JSON_CONTAINS(targetRoles, '"${role}"')`)
+            ];
         }
 
         // Add search filter

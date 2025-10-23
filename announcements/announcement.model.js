@@ -1,4 +1,5 @@
 const { DataTypes } = require('sequelize');
+const { literal } = require('sequelize');
 
 module.exports = (sequelize) => {
     const Announcement = sequelize.define('Announcement', {
@@ -151,9 +152,9 @@ module.exports = (sequelize) => {
         return this.findAll({
             where: {
                 status: 'Published',
-                targetRoles: {
-                    [sequelize.Sequelize.Op.contains]: [role]
-                },
+                [sequelize.Sequelize.Op.and]: [
+                    literal(`JSON_CONTAINS(targetRoles, '"${role}"')`)
+                ],
                 [sequelize.Sequelize.Op.or]: [
                     { expiresAt: null },
                     { expiresAt: { [sequelize.Sequelize.Op.gt]: new Date() } }

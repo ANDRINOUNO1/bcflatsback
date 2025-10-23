@@ -3,7 +3,8 @@ const config = require('../config.json');
 const db = require('../_helpers/db');
 
 module.exports = {
-    requireHeadAdmin
+    requireHeadAdmin,
+    requireSuperAdminOrHeadAdmin
 };
 
 // Middleware to require Head Admin role
@@ -28,6 +29,40 @@ function requireHeadAdmin() {
                 if (account.role !== 'HeadAdmin') {
                     return res.status(403).json({ 
                         message: 'Head Admin role required'
+                    });
+                }
+
+                req.user = account;
+                next();
+            } catch (error) {
+                return res.status(401).json({ message: 'Authentication required' });
+            }
+        }
+    ];
+}
+
+// Middleware to require Super Admin or Head Admin role
+function requireSuperAdminOrHeadAdmin() {
+    return [
+        async (req, res, next) => {
+            try {
+                const authHeader = req.headers.authorization;
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    return res.status(401).json({ message: 'Authentication required' });
+                }
+
+                const token = authHeader.substring(7);
+                const decoded = jwt.verify(token, config.secret);
+                
+                const account = await db.Account.findByPk(decoded.id);
+                if (!account || account.status !== 'Active') {
+                    return res.status(401).json({ message: 'Authentication required' });
+                }
+
+                // Check if user is SuperAdmin or HeadAdmin
+                if (!['SuperAdmin', 'HeadAdmin'].includes(account.role)) {
+                    return res.status(403).json({ 
+                        message: 'Super Admin or Head Admin role required'
                     });
                 }
 

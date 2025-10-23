@@ -11,7 +11,8 @@ module.exports = {
     
     // Navigation Permission Management
     getNavigationPermissions,
-    updateNavigationAccess
+    updateNavigationAccess,
+    getCurrentUserNavigationAccess
 };
 
 // ================= SIMPLIFIED ADMIN MANAGEMENT =================
@@ -72,10 +73,17 @@ async function updateAdminNavigationPermissions(req, res, next) {
         const { adminId } = req.params;
         const { permissions } = req.body;
         
+        console.log('🔧 Navigation Control: Updating permissions for admin:', adminId);
+        console.log('🔧 Navigation Control: Request body:', req.body);
+        console.log('🔧 Navigation Control: Permissions:', permissions);
+        console.log('🔧 Navigation Control: User making request:', req.user.id, req.user.role);
+        
         await navigationControlService.updateAdminNavigationPermissions(adminId, permissions, req.user.id);
         
+        console.log('✅ Navigation Control: Permissions updated successfully');
         res.json({ message: 'Admin navigation permissions updated successfully' });
     } catch (error) {
+        console.error('❌ Navigation Control: Failed to update permissions:', error);
         next(error);
     }
 }
@@ -135,6 +143,20 @@ async function updateNavigationAccess(req, res, next) {
         const result = await navigationControlService.updateNavigationAccess(adminId, navigationItems);
         
         res.json(result);
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function getCurrentUserNavigationAccess(req, res, next) {
+    try {
+        const userId = req.user.id;
+        const userRole = req.user.role;
+        
+        // Get user's navigation permissions
+        const navigationAccess = await navigationControlService.getCurrentUserNavigationAccess(userId, userRole);
+        
+        res.json(navigationAccess);
     } catch (error) {
         next(error);
     }

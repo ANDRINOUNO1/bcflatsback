@@ -10,20 +10,20 @@ router.get('/available', getAvailableRooms);
 //auth routes
 router.get('/', ...authorize(), getAllRooms);
 router.get('/:id', ...authorize(), getRoomById);
-router.post('/', ...authorize(['Admin', 'SuperAdmin']), createRoom);
-router.put('/:id', ...authorize(['Admin', 'SuperAdmin']), updateRoom);
-router.delete('/:id', ...authorize(['Admin', 'SuperAdmin']), deleteRoom);
+router.post('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), createRoom);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), updateRoom);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), deleteRoom);
 
 // Room status management
-router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin', 'User']), updateRoomStatus);
-router.patch('/:id/maintenance', ...authorize(['Admin', 'SuperAdmin']), setMaintenanceMode);
+router.patch('/:id/status', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting', 'User']), updateRoomStatus);
+router.patch('/:id/maintenance', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), setMaintenanceMode);
 
 // Room pricing management
-router.patch('/:id/pricing', ...authorize(['Admin', 'SuperAdmin']), updateRoomPricing);
+router.patch('/:id/pricing', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), updateRoomPricing);
 
 // Tenant management
-router.post('/:id/tenants', ...authorize(['Admin', 'SuperAdmin']), addTenantToRoom);
-router.delete('/:id/tenants/:tenantId', ...authorize(['Admin', 'SuperAdmin']), removeTenantFromRoom);
+router.post('/:id/tenants', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), addTenantToRoom);
+router.delete('/:id/tenants/:tenantId', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), removeTenantFromRoom);
 router.get('/:id/tenants', ...authorize(), getRoomTenants);
 router.get('/:id/beds', ...authorize(), getRoomBedStatus);
 

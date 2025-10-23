@@ -3,33 +3,34 @@ const router = express.Router();
 const accountService = require('./account.service');
 const navigationControlController = require('./navigation-control.controller');
 const authorize = require('../_middleware/authorize');
-const { requireHeadAdmin } = require('./headadmin.middleware');
+const { requireHeadAdmin, requireSuperAdminOrHeadAdmin } = require('./headadmin.middleware');
 
 // routes
 router.post('/authenticate', authenticate);
 router.post('/register', register);
-router.post('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), createAccount);
-router.get('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getAll);
+router.post('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), createAccount);
+router.get('/', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), getAll);
 // SuperAdmin: pending list and account management
 router.get('/pending', ...authorize(['SuperAdmin', 'HeadAdmin']), getPending);
 router.patch('/:id/approve', ...authorize(['SuperAdmin', 'HeadAdmin']), approveAccount);
 router.patch('/:id/reject', ...authorize(['SuperAdmin', 'HeadAdmin']), rejectAccount);
 router.patch('/:id/role', ...authorize(['SuperAdmin', 'HeadAdmin']), setRole);
 router.patch('/:id/status', ...authorize(['SuperAdmin', 'HeadAdmin']), setStatus);
-router.get('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), getById);
-router.put('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), update);
-router.delete('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin']), _delete);
+router.get('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), getById);
+router.put('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), update);
+router.delete('/:id', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), _delete);
 
-// Simplified Navigation Control routes (Head Admin only)
-router.get('/navigation-control/admins', ...requireHeadAdmin(), navigationControlController.getAllAdmins);
-router.post('/navigation-control/admins', ...requireHeadAdmin(), navigationControlController.createAdmin);
-router.put('/navigation-control/admins/:adminId/navigation', ...requireHeadAdmin(), navigationControlController.updateAdminNavigationPermissions);
-router.patch('/navigation-control/admins/:adminId/deactivate', ...requireHeadAdmin(), navigationControlController.deactivateAdmin);
-router.delete('/navigation-control/admins/:adminId', ...requireHeadAdmin(), navigationControlController.deleteAdmin);
+// Simplified Navigation Control routes (Super Admin and Head Admin only)
+router.get('/navigation-control/admins', ...requireSuperAdminOrHeadAdmin(), navigationControlController.getAllAdmins);
+router.post('/navigation-control/admins', ...requireSuperAdminOrHeadAdmin(), navigationControlController.createAdmin);
+router.put('/navigation-control/admins/:adminId/navigation', ...requireSuperAdminOrHeadAdmin(), navigationControlController.updateAdminNavigationPermissions);
+router.patch('/navigation-control/admins/:adminId/deactivate', ...requireSuperAdminOrHeadAdmin(), navigationControlController.deactivateAdmin);
+router.delete('/navigation-control/admins/:adminId', ...requireSuperAdminOrHeadAdmin(), navigationControlController.deleteAdmin);
 
 // Navigation permission management
-router.get('/navigation-control/permissions', ...requireHeadAdmin(), navigationControlController.getNavigationPermissions);
-router.put('/navigation-control/admins/:adminId/access', ...requireHeadAdmin(), navigationControlController.updateNavigationAccess);
+router.get('/navigation-control/permissions', ...requireSuperAdminOrHeadAdmin(), navigationControlController.getNavigationPermissions);
+router.put('/navigation-control/admins/:adminId/access', ...requireSuperAdminOrHeadAdmin(), navigationControlController.updateNavigationAccess);
+router.get('/navigation-control/current-user-access', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting', 'Tenant']), navigationControlController.getCurrentUserNavigationAccess);
 
 module.exports = router;
 

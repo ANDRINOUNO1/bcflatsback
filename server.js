@@ -68,16 +68,20 @@ app.get('/api/debug/accounts', async (req, res) => {
 app.get('/api/test-auth', ...authorize(), async (req, res) => {
   try {
     const accountService = require('./account/account.service');
-    const userDetails = await accountService.basicDetails(req.user);
+    const fullUserData = await accountService.basicDetails(req.user);
     
     res.json({ 
       status: 'OK', 
       message: 'Authentication successful',
-      user: userDetails
+      user: fullUserData
     });
   } catch (error) {
-    console.error('❌ Error in test-auth:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error in test-auth endpoint:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Failed to get user data',
+      error: error.message 
+    });
   }
 });
 

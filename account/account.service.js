@@ -267,8 +267,8 @@ async function basicDetails(account) {
     // Get basic permissions based on role
     let permissions = getRolePermissions(role);
     
-    // Check for custom navigation permissions (for Admin role)
-    if (role === 'Admin') {
+    // Check for custom navigation permissions (for all roles that can have custom permissions)
+    if (['Admin', 'Accounting', 'Tenant'].includes(role)) {
         try {
             const navigationPermission = await db.NavigationPermission.findOne({
                 where: { accountId: id }
@@ -278,13 +278,19 @@ async function basicDetails(account) {
                 const customPermissions = JSON.parse(navigationPermission.permissions);
                 // Convert custom permission IDs to permission objects
                 permissions = customPermissions.map(permId => {
-                    const navPerm = getRolePermissions('Admin').find(p => p.id === permId);
+                    const navPerm = getRolePermissions(role).find(p => p.id === permId);
                     return navPerm || { id: permId, name: `nav.${permId}`, resource: 'navigation', action: permId };
                 });
+                console.log(`✅ Loaded custom navigation permissions for ${role} user ${id}:`, permissions.length, 'permissions');
+            } else {
+                console.log(`📋 Using default role permissions for ${role} user ${id}:`, permissions.length, 'permissions');
             }
         } catch (error) {
             console.log('Error loading custom navigation permissions:', error.message);
+            console.log(`📋 Falling back to default role permissions for ${role} user ${id}:`, permissions.length, 'permissions');
         }
+    } else {
+        console.log(`👑 Using full permissions for ${role} user ${id}:`, permissions.length, 'permissions');
     }
     
     return { 
@@ -302,8 +308,8 @@ async function basicDetails(account) {
 // Helper function to get role level
 function getRoleLevel(roleName) {
     const roleLevels = {
-        'HeadAdmin': 100,
-        'SuperAdmin': 90,
+        'SuperAdmin': 100,
+        'HeadAdmin': 90,
         'Admin': 50,
         'Accounting': 30,
         'Tenant': 10
@@ -337,13 +343,15 @@ function getRolePermissions(roleName) {
             { id: 19, name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
             { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
             { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' },
-            { id: 22, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
-            { id: 23, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
-            { id: 24, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
-            { id: 25, name: 'nav.archives', resource: 'navigation', action: 'archives' },
-            { id: 26, name: 'nav.add_account', resource: 'navigation', action: 'add_account' }
+            { id: 22, name: 'nav.overdue_payments', resource: 'navigation', action: 'overdue_payments' },
+            { id: 23, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
+            { id: 24, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
+            { id: 25, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
+            { id: 26, name: 'nav.archives', resource: 'navigation', action: 'archives' },
+            { id: 27, name: 'nav.add_account', resource: 'navigation', action: 'add_account' }
         ],
         'SuperAdmin': [
+            { id: 1, name: 'manage_users', resource: 'user_management', action: 'manage' },
             { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
             { id: 3, name: 'manage_rooms', resource: 'rooms', action: 'manage' },
             { id: 4, name: 'view_rooms', resource: 'rooms', action: 'read' },
@@ -356,17 +364,27 @@ function getRolePermissions(roleName) {
             { id: 11, name: 'manage_announcements', resource: 'announcements', action: 'manage' },
             { id: 12, name: 'view_announcements', resource: 'announcements', action: 'read' },
             { id: 13, name: 'view_archives', resource: 'archives', action: 'read' },
+            { id: 14, name: 'manage_roles', resource: 'roles', action: 'manage' },
+            { id: 15, name: 'manage_permissions', resource: 'permissions', action: 'manage' },
             { id: 16, name: 'view_accounting', resource: 'accounting', action: 'read' },
+            { id: 17, name: 'manage_admins', resource: 'admin_management', action: 'manage' },
+            { id: 30, name: 'edit_admins', resource: 'admin_management', action: 'edit' },
+            { id: 31, name: 'delete_admins', resource: 'admin_management', action: 'delete' },
+            { id: 32, name: 'manage_navigation_permissions', resource: 'navigation_control', action: 'manage' },
+            { id: 33, name: 'edit_navigation_permissions', resource: 'navigation_control', action: 'edit' },
             // Navigation permissions
             { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
             { id: 19, name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
             { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
             { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' },
-            { id: 22, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
-            { id: 23, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
-            { id: 24, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
-            { id: 25, name: 'nav.archives', resource: 'navigation', action: 'archives' },
-            { id: 26, name: 'nav.add_account', resource: 'navigation', action: 'add_account' }
+            { id: 22, name: 'nav.overdue_payments', resource: 'navigation', action: 'overdue_payments' },
+            { id: 23, name: 'nav.pricing', resource: 'navigation', action: 'pricing' },
+            { id: 24, name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
+            { id: 25, name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
+            { id: 26, name: 'nav.archives', resource: 'navigation', action: 'archives' },
+            { id: 27, name: 'nav.add_account', resource: 'navigation', action: 'add_account' },
+            { id: 28, name: 'nav.admin_management', resource: 'navigation', action: 'admin_management' },
+            { id: 29, name: 'nav.navigation_control', resource: 'navigation', action: 'navigation_control' }
         ],
         'Admin': [
             { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
@@ -379,6 +397,7 @@ function getRolePermissions(roleName) {
             { id: 'dashboard', name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
             { id: 'rooms', name: 'nav.rooms', resource: 'navigation', action: 'rooms' },
             { id: 'tenants', name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
+            { id: 'overdue_payments', name: 'nav.overdue_payments', resource: 'navigation', action: 'overdue_payments' },
             { id: 'maintenance', name: 'nav.maintenance', resource: 'navigation', action: 'maintenance' },
             { id: 'announcements', name: 'nav.announcements', resource: 'navigation', action: 'announcements' },
             { id: 'archives', name: 'nav.archives', resource: 'navigation', action: 'archives' }
@@ -392,7 +411,8 @@ function getRolePermissions(roleName) {
             // Navigation permissions
             { id: 18, name: 'nav.dashboard', resource: 'navigation', action: 'dashboard' },
             { id: 20, name: 'nav.tenants', resource: 'navigation', action: 'tenants' },
-            { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' }
+            { id: 21, name: 'nav.accounting', resource: 'navigation', action: 'accounting' },
+            { id: 22, name: 'nav.overdue_payments', resource: 'navigation', action: 'overdue_payments' }
         ],
         'Tenant': [
             { id: 2, name: 'view_dashboard', resource: 'dashboard', action: 'read' },
