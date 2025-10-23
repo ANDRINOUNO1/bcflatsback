@@ -422,6 +422,12 @@ async function getTenantsByAccount(accountId) {
     try {
         const tenants = await db.Tenant.findAll({
             where: { accountId },
+            attributes: [
+                'id', 'accountId', 'roomId', 'bedNumber', 'checkInDate', 'checkOutDate',
+                'leaseStart', 'leaseEnd', 'status', 'monthlyRent', 'utilities', 'deposit',
+                'depositPaid', 'emergencyContact', 'specialRequirements', 'notes',
+                'outstandingBalance', 'lastPaymentDate', 'nextDueDate', 'createdAt', 'updatedAt'
+            ],
             include: [
                 {
                     model: db.Room,
