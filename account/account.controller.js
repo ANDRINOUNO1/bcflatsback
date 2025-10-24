@@ -28,7 +28,7 @@ router.patch('/navigation-control/admins/:adminId/deactivate', ...requireSuperAd
 router.delete('/navigation-control/admins/:adminId', ...requireSuperAdminOrHeadAdmin(), navigationControlController.deleteAdmin);
 
 // Navigation permission management
-router.get('/navigation-control/permissions', ...requireSuperAdminOrHeadAdmin(), navigationControlController.getNavigationPermissions);
+router.get('/navigation-control/permissions', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting']), navigationControlController.getNavigationPermissions);
 router.put('/navigation-control/admins/:adminId/access', ...requireSuperAdminOrHeadAdmin(), navigationControlController.updateNavigationAccess);
 router.get('/navigation-control/current-user-access', ...authorize(['Admin', 'SuperAdmin', 'HeadAdmin', 'Accounting', 'Tenant']), navigationControlController.getCurrentUserNavigationAccess);
 

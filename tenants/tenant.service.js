@@ -555,26 +555,24 @@ async function getTenantBillingInfo(tenantId) {
         // The actual ledger (outstandingBalance) remains correct, but we show a "display balance"
         // that reflects what the tenant should see after deposit consideration
         let correctedOutstanding;
-        if (totalDepositApplied > 0) {
+        
+        // For new tenants with no billing cycles, calculate as totalMonthly - deposit
+        if (billingCycles.length === 0 && parseFloat(tenant.deposit || 0) > 0) {
+            correctedOutstanding = Math.max(0, totalMonthly - parseFloat(tenant.deposit || 0));
+            console.log(`[Tenant ${tenantId}] New tenant calculation: totalMonthly(${totalMonthly}) - deposit(${tenant.deposit}) = ${correctedOutstanding}`);
+        } else if (totalDepositApplied > 0) {
             // Deposit was applied in billing cycles - show original balance minus the deposit applied
             correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - totalDepositApplied);
-        } else if (!anyDepositApplied && billingCycles.length === 0) {
-            // New tenant with no billing cycles yet - check if deposit was applied during creation
-            if (tenant.depositPaid && parseFloat(tenant.deposit || 0) > 0) {
-                // Deposit was applied during tenant creation
-                const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
-                correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - computedCredit);
-            } else {
-                // No deposit applied - use current balance
-                correctedOutstanding = tenant.getOutstandingBalance();
-            }
-        } else if (!anyDepositApplied) {
+            console.log(`[Tenant ${tenantId}] Billing cycle calculation: outstanding(${tenant.getOutstandingBalance()}) - depositApplied(${totalDepositApplied}) = ${correctedOutstanding}`);
+        } else if (!anyDepositApplied && parseFloat(tenant.deposit || 0) > 0) {
             // First time - compute deposit credit for display
             const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
             correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - computedCredit);
+            console.log(`[Tenant ${tenantId}] First time calculation: outstanding(${tenant.getOutstandingBalance()}) - computedCredit(${computedCredit}) = ${correctedOutstanding}`);
         } else {
             // Fallback - use as-is
             correctedOutstanding = tenant.getOutstandingBalance();
+            console.log(`[Tenant ${tenantId}] Fallback calculation: ${correctedOutstanding}`);
         }
         
         console.log(`[Tenant ${tenantId}] Balance Calculation:`, {

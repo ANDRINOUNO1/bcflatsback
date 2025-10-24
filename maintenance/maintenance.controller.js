@@ -94,8 +94,8 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
         where: { tenantId: parseInt(tenantId) },
         order: [['createdAt', 'DESC']],
         include: [
-          { model: db.Room, attributes: ['roomNumber', 'building'] },
-          { model: db.Tenant, attributes: ['firstName', 'lastName'] }
+          { model: db.Room, as: 'room', attributes: ['roomNumber', 'building'] },
+          { model: db.Tenant, as: 'tenant', attributes: ['firstName', 'lastName'] }
         ]
       });
       return res.json(requests);
@@ -116,8 +116,8 @@ router.get('/tenant/:tenantId', authorize(), async (req, res, next) => {
       where: { tenantId: parseInt(tenantId) },
       order: [['createdAt', 'DESC']],
       include: [
-        { model: db.Room, attributes: ['roomNumber', 'building'] },
-        { model: db.Tenant, attributes: ['firstName', 'lastName'] }
+        { model: db.Room, as: 'room', attributes: ['roomNumber', 'building'] },
+        { model: db.Tenant, as: 'tenant', attributes: ['firstName', 'lastName'] }
       ]
     });
     

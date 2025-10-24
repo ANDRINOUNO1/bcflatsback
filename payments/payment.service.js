@@ -209,22 +209,19 @@ async function getTenantsWithBillingInfo() {
 
             // Calculate corrected outstanding balance (same logic as getTenantBillingInfo)
             let correctedOutstanding;
-            if (totalDepositApplied > 0) {
+            
+            // For new tenants with no billing cycles, calculate as totalMonthly - deposit
+            if (billingCycles.length === 0 && parseFloat(tenant.deposit || 0) > 0) {
+                correctedOutstanding = Math.max(0, totalMonthly - parseFloat(tenant.deposit || 0));
+                console.log(`[Accounting - Tenant ${tenant.id}] New tenant calculation: totalMonthly(${totalMonthly}) - deposit(${tenant.deposit}) = ${correctedOutstanding}`);
+            } else if (totalDepositApplied > 0) {
                 // Deposit was applied - show balance minus total deposit applied
                 correctedOutstanding = Math.max(0, originalBalance - totalDepositApplied);
-            } else if (billingCycles.length === 0) {
-                // New tenant with no billing cycles yet - check if deposit was applied during creation
-                if (tenant.depositPaid && parseFloat(tenant.deposit || 0) > 0) {
-                    // Deposit was applied during tenant creation
-                    const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
-                    correctedOutstanding = Math.max(0, originalBalance - computedCredit);
-                } else {
-                    // No deposit applied - use current balance
-                    correctedOutstanding = originalBalance;
-                }
+                console.log(`[Accounting - Tenant ${tenant.id}] Billing cycle calculation: outstanding(${originalBalance}) - depositApplied(${totalDepositApplied}) = ${correctedOutstanding}`);
             } else {
                 // No deposit applied yet - use as-is
                 correctedOutstanding = originalBalance;
+                console.log(`[Accounting - Tenant ${tenant.id}] No deposit calculation: ${correctedOutstanding}`);
             }
 
             console.log(`[Accounting - Tenant ${tenant.id}] ${tenant.account.firstName} ${tenant.account.lastName}:`, {
