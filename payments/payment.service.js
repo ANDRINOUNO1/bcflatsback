@@ -212,6 +212,16 @@ async function getTenantsWithBillingInfo() {
             if (totalDepositApplied > 0) {
                 // Deposit was applied - show balance minus total deposit applied
                 correctedOutstanding = Math.max(0, originalBalance - totalDepositApplied);
+            } else if (billingCycles.length === 0) {
+                // New tenant with no billing cycles yet - check if deposit was applied during creation
+                if (tenant.depositPaid && parseFloat(tenant.deposit || 0) > 0) {
+                    // Deposit was applied during tenant creation
+                    const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
+                    correctedOutstanding = Math.max(0, originalBalance - computedCredit);
+                } else {
+                    // No deposit applied - use current balance
+                    correctedOutstanding = originalBalance;
+                }
             } else {
                 // No deposit applied yet - use as-is
                 correctedOutstanding = originalBalance;

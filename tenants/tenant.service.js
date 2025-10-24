@@ -206,13 +206,45 @@ async function createTenant(tenantData) {
             throw new Error('Room is fully occupied');
         }
 
-        // Create tenant (do not change room occupancy until check-in)
+        // Calculate initial balance based on monthly rent and utilities
+        const monthlyCharges = parseFloat(tenantData.monthlyRent) + parseFloat(tenantData.utilities || 0);
+        const depositAmount = parseFloat(tenantData.deposit || 0);
+        
+        // Apply deposit to first month's charges if deposit is provided
+        let initialBalance = monthlyCharges;
+        let depositApplied = 0;
+        
+        if (depositAmount > 0) {
+            // Apply deposit against first month's charges
+            depositApplied = Math.min(depositAmount, monthlyCharges);
+            initialBalance = Math.max(0, monthlyCharges - depositApplied);
+        }
+
+        // Create tenant with proper initial balance
         const tenant = await db.Tenant.create({
             ...tenantData,
             accountId: account.id,
             status: 'Pending',
-            checkInDate: new Date()
+            checkInDate: new Date(),
+            outstandingBalance: initialBalance,
+            depositPaid: depositApplied > 0
         });
+
+        // Create initial billing cycle to track the deposit application
+        if (depositApplied > 0) {
+            const now = new Date();
+            const currentCycleMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            
+            await db.BillingCycle.create({
+                tenantId: tenant.id,
+                cycleMonth: currentCycleMonth,
+                previousBalance: 0,
+                depositApplied: depositApplied.toFixed(2),
+                monthlyCharges: monthlyCharges.toFixed(2),
+                paymentsMade: 0,
+                finalBalance: initialBalance.toFixed(2)
+            });
+        }
 
         // Return tenant with details
         return await getTenantById(tenant.id);
@@ -526,6 +558,16 @@ async function getTenantBillingInfo(tenantId) {
         if (totalDepositApplied > 0) {
             // Deposit was applied in billing cycles - show original balance minus the deposit applied
             correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - totalDepositApplied);
+        } else if (!anyDepositApplied && billingCycles.length === 0) {
+            // New tenant with no billing cycles yet - check if deposit was applied during creation
+            if (tenant.depositPaid && parseFloat(tenant.deposit || 0) > 0) {
+                // Deposit was applied during tenant creation
+                const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
+                correctedOutstanding = Math.max(0, tenant.getOutstandingBalance() - computedCredit);
+            } else {
+                // No deposit applied - use current balance
+                correctedOutstanding = tenant.getOutstandingBalance();
+            }
         } else if (!anyDepositApplied) {
             // First time - compute deposit credit for display
             const computedCredit = Math.min(parseFloat(tenant.deposit || 0), totalMonthly);
